@@ -310,20 +310,19 @@ test "decode: unknown / unsupported opcodes refuse with Invalid" {
 }
 
 test "disassemble: count limit, address continuity, .byte on refusal" {
-  let data = b([0x90, 0x90, 0x0f, 0x0b, 0x90])
+  let data = b([0x90, 0x90, 0xd6, 0x90])
   let two = disassemble(data, 0x1000L, 2)
   assert_eq(two.length(), 2)
   assert_eq(two[0].addr, 0x1000L)
   assert_eq(two[1].addr, 0x1001L)
-  // ud2 (0f 0b) is outside the subset: emitted as two raw .byte rows, then
-  // decoding continues instead of silently truncating.
+  // 0xd6 is outside the subset: emitted as a raw .byte row, then decoding
+  // continues instead of silently truncating.
   let all = disassemble(data, 0x1000L, 10)
-  assert_eq(all.length(), 5)
+  assert_eq(all.length(), 4)
   assert_eq(all[2].mnemonic, ".byte")
   assert_eq(all[2].addr, 0x1002L)
-  assert_eq(all[3].mnemonic, ".byte")
-  assert_eq(all[4].mnemonic, "nop")
-  assert_eq(all[4].addr, 0x1004L)
+  assert_eq(all[3].mnemonic, "nop")
+  assert_eq(all[3].addr, 0x1003L)
   assert_eq(disassemble(data, 0L, 0).length(), 0)
   assert_eq(disassemble(Bytes::from_array([]), 0L, 5).length(), 0)
   let exact = disassemble(b([0xc3]), 0x2000L, 99)
