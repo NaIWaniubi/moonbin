@@ -1,0 +1,29 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "NaIWaniubi/moonbin/src/elf"
+
+import {
+  "NaIWaniubi/moonbin/src/core",
+  "moonbitlang/core/debug",
+}
+
+// Values
+pub fn parse(Bytes) -> Result[Elf, @core.ParseError]
+
+// Errors
+
+// Types and methods
+pub(all) struct Elf {
+  class : Int32
+  endian : @core.Endian
+  machine : Int32
+  entry : Int64
+  sections : Array[@core.Region]
+  segments : Array[@core.Region]
+  symbols : Array[@core.Symbol]
+  imports : Array[@core.Import]
+  exports : Array[@core.Export]
+} derive(@debug.Debug)
+
+// Type aliases
+
+// Traits
