@@ -21,6 +21,10 @@ pub(all) struct Elf {
   imports : Array[@core.Import]
   /// Defined SHT_DYNSYM symbols.
   exports : Array[@core.Export]
+  /// Symbols referenced by JUMP_SLOT / GLOB_DAT relocations (SHT_RELA /
+  /// SHT_REL, including .rela.plt / .rel.dyn), in section-table order.
+  /// The library is the first DT_NEEDED entry when present, else "".
+  reloc_imports : Array[@core.Import]
 } derive(Debug)
 
 /// Internal carrier so helpers can `raise` and `parse` converts to `Result`.
@@ -31,8 +35,10 @@ priv suberror ElfErr {
 // Section header types.
 let sht_null : Int64 = 0
 let sht_symtab : Int64 = 2
+let sht_rela : Int64 = 4
 let sht_dynamic : Int64 = 6
 let sht_nobits : Int64 = 8
+let sht_rel : Int64 = 9
 let sht_dynsym : Int64 = 11
 
 // Extended numbering escapes.
@@ -42,6 +48,8 @@ let pn_xnum : Int64 = 0xFFFF
 // Dynamic tags.
 let dt_null : Int64 = 0
 let dt_needed : Int64 = 1
+let dt_pltrel : Int64 = 20
+let dt_jmprel : Int64 = 23
 
 /// Raw section header, class/endian normalized to Int64.
 priv struct Shdr {
@@ -472,9 +480,11 @@ fn parse_inner(r : @core.Reader) -> Elf raise ElfErr {
       )
     }
   }
-  // Symbol tables.
+  // Symbol tables. Raw dynsym entries are kept (indexed) so relocation
+  // r_info symbol indices can be resolved to names below.
   let symbols : Array[@core.Symbol] = []
   let exports : Array[@core.Export] = []
+  let dynsyms : Map[Int, Sym] = Map([])
   let sym_want : Int64 = if class == 64 { 24 } else { 16 }
   for s in shdrs {
     if s.typ != sht_symtab && s.typ != sht_dynsym {
@@ -495,6 +505,9 @@ fn parse_inner(r : @core.Reader) -> Elf raise ElfErr {
         raise ElfErr(trunc("symbol table seek"))
       }
       let sym = read_sym(r, endian, class)
+      if is_dyn {
+        dynsyms[i] = sym
+      }
       // Skip the standard all-zero null entry at index 0.
       if i == 0 &&
         sym.name_off == 0 &&
@@ -532,8 +545,11 @@ fn parse_inner(r : @core.Reader) -> Elf raise ElfErr {
       }
     }
   }
-  // SHT_DYNAMIC: DT_NEEDED -> imports.
-  let imports : Array[@core.Import] = []
+  // SHT_DYNAMIC: DT_NEEDED -> imports; DT_JMPREL / DT_PLTREL locate the
+  // PLT relocation table for the attribution pass below.
+  let needed : Array[String] = []
+  let mut jmprel : Int64 = 0
+  let mut pltrel : Int64 = 0
   let dyn_want : Int64 = if class == 64 { 16 } else { 8 }
   for s in shdrs {
     if s.typ != sht_dynamic {
@@ -558,11 +574,26 @@ fn parse_inner(r : @core.Reader) -> Elf raise ElfErr {
         break
       }
       if tag == dt_needed {
-        let library = section_string(r, strtab, val)
-        imports.push(@core.Import::{ library, name: "" })
+        needed.push(section_string(r, strtab, val))
+      }
+      if tag == dt_jmprel && jmprel == 0 {
+        jmprel = val
+      }
+      if tag == dt_pltrel && pltrel == 0 {
+        pltrel = val
       }
     }
   }
+  let imports : Array[@core.Import] = []
+  for library in needed {
+    imports.push(@core.Import::{ library, name: "" })
+  }
+  // SHT_RELA / SHT_REL: JUMP_SLOT / GLOB_DAT entries name the symbols the
+  // dynamic linker must bind. Attribute them to the first DT_NEEDED library
+  // (ELF has no per-symbol library mapping); without DT_NEEDED use "".
+  let reloc_imports = parse_reloc_imports(
+    r, endian, class, shdrs, dynsyms, needed, jmprel, pltrel,
+  )
   Elf::{
     class,
     endian,
@@ -573,7 +604,128 @@ fn parse_inner(r : @core.Reader) -> Elf raise ElfErr {
     symbols,
     imports,
     exports,
+    reloc_imports,
   }
+}
+
+/// Walk SHT_RELA / SHT_REL sections and emit one Import per JUMP_SLOT or
+/// GLOB_DAT relocation whose symbol resolves to a non-empty dynsym name.
+/// Other relocation types (RELATIVE, COPY, TLS, ...) carry no import name
+/// and are skipped. The DT_JMPREL / DT_PLTREL pair only validates that a
+/// pointed-at PLT table is well-formed; attribution itself is section-driven.
+fn parse_reloc_imports(
+  r : @core.Reader,
+  endian : @core.Endian,
+  class : Int,
+  shdrs : Array[Shdr],
+  dynsyms : Map[Int, Sym],
+  needed : Array[String],
+  jmprel : Int64,
+  pltrel : Int64,
+) -> Array[@core.Import] raise ElfErr {
+  let out : Array[@core.Import] = []
+  let library = if needed.length() > 0 { needed[0] } else { "" }
+  let rela_want : Int64 = if class == 64 { 24 } else { 12 }
+  let rel_want : Int64 = if class == 64 { 16 } else { 8 }
+  // x86-64: R_X86_64_JUMP_SLOT = 7, R_X86_64_GLOB_DAT = 6.
+  // i386:   R_386_JMP_SLOT = 7,   R_386_GLOB_DAT = 6 (same codes).
+  for s in shdrs {
+    if s.typ != sht_rela && s.typ != sht_rel {
+      continue
+    }
+    let is_rela = s.typ == sht_rela
+    let symtab = linked_table(shdrs, s, "relocation symbol table")
+    if symtab.typ != sht_dynsym && symtab.typ != sht_symtab {
+      raise ElfErr(bad("relocation sh_link does not point at a symbol table"))
+    }
+    let strtab = linked_table(shdrs, symtab, "relocation symbol string table")
+    let want = if is_rela { rela_want } else { rel_want }
+    let entsize = if s.entsize > 0 { s.entsize } else { want }
+    if entsize != want {
+      raise ElfErr(bad("relocation entry size does not match ELF class"))
+    }
+    if s.size < 0 || (s.size % entsize) != 0 {
+      raise ElfErr(bad("relocation table size is not a multiple of entry size"))
+    }
+    let count = (s.size / entsize).to_int()
+    for i = 0; i < count; i = i + 1 {
+      if !r.seek((s.offset + i.to_int64() * entsize).to_int()) {
+        raise ElfErr(trunc("relocation table seek"))
+      }
+      let _r_offset = need(read_addr(r, endian, class), "r_offset")
+      let r_info = need(read_addr(r, endian, class), "r_info")
+      if is_rela {
+        let _r_addend = need(read_addr(r, endian, class), "r_addend")
+      }
+      let (sym_idx, r_type) = if class == 64 {
+        ((r_info >> 32).to_int(), r_info & 0xFFFFFFFF)
+      } else {
+        ((r_info >> 8).to_int(), r_info & 0xFF)
+      }
+      if r_type != 6 && r_type != 7 {
+        continue
+      }
+      if sym_idx == 0 {
+        continue
+      }
+      // Resolve through the linked table; dynsym indices are the common
+      // case, symtab-linked relocation tables are handled the same way.
+      let mut name = ""
+      if symtab.typ == sht_dynsym {
+        match dynsyms.get(sym_idx) {
+          Some(sym) =>
+            if sym.name_off != 0 {
+              name = section_string(r, strtab, sym.name_off)
+            }
+          None => raise ElfErr(bad("relocation symbol index out of range"))
+        }
+        if name == "" {
+          // Unnamed symbol: refuse rather than guess (a JUMP_SLOT/GLOB_DAT
+          // must name something).
+          raise ElfErr(bad("relocation symbol has no name"))
+        }
+      } else {
+        // SHT_SYMTAB-linked: read the entry directly.
+        let sym_es : Int64 = if class == 64 { 24 } else { 16 }
+        if sym_idx.to_int64() >= symtab.size / sym_es {
+          raise ElfErr(bad("relocation symbol index out of range"))
+        }
+        if !r.seek((symtab.offset + sym_idx.to_int64() * sym_es).to_int()) {
+          raise ElfErr(trunc("relocation symbol seek"))
+        }
+        let sym = read_sym(r, endian, class)
+        if sym.name_off != 0 {
+          name = section_string(r, strtab, sym.name_off)
+        }
+        if name == "" {
+          raise ElfErr(bad("relocation symbol has no name"))
+        }
+      }
+      out.push(@core.Import::{ library, name })
+    }
+  }
+  // DT_JMPREL sanity: when present it must point at a RELA/REL section
+  // whose type agrees with DT_PLTREL (7 = DT_RELA, 9 = DT_REL).
+  if jmprel != 0 {
+    let mut found = false
+    for s in shdrs {
+      if s.typ != sht_rela && s.typ != sht_rel {
+        continue
+      }
+      if s.addr == jmprel {
+        let want_tag : Int64 = if s.typ == sht_rela { 7 } else { 9 }
+        if pltrel != 0 && pltrel != want_tag {
+          raise ElfErr(bad("DT_PLTREL disagrees with the DT_JMPREL table"))
+        }
+        found = true
+        break
+      }
+    }
+    if !found {
+      raise ElfErr(bad("DT_JMPREL does not point at a relocation section"))
+    }
+  }
+  out
 }
 
 /// Parse an ELF image: header, program headers, section headers, symbol

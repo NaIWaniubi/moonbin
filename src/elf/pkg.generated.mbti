@@ -22,6 +22,7 @@ pub(all) struct Elf {
   symbols : Array[@core.Symbol]
   imports : Array[@core.Import]
   exports : Array[@core.Export]
+  reloc_imports : Array[@core.Import]
 } derive(@debug.Debug)
 
 // Type aliases

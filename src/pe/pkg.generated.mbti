@@ -21,6 +21,10 @@ pub(all) struct Pe {
   imports : Array[@core.Import]
   exports : Array[@core.Export]
   symbols : Array[@core.Symbol]
+  relocations : Array[(Int64, Int32)]
+  delay_imports : Array[@core.Import]
+  tls_callbacks : Array[Int64]
+  resource_types : Array[Int32]
 } derive(@debug.Debug)
 
 // Type aliases

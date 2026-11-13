@@ -492,3 +492,282 @@ test "crosscheck dump crafted fixtures" {
   println("ELFCROSS elf64le " + to_hex(b64))
   println("ELFCROSS elf32be " + to_hex(b32))
 }
+
+// ---------------------------------------------------------------------------
+// Relocation fixture: build_elf plus
+//   [8] .rela.plt  SHT_RELA, link -> .dynsym(4), info -> .got.plt(10)
+//       R_X86_64_JUMP_SLOT (7) -> dynsym 1 "printf"   @ base+0x5000
+//       R_X86_64_GLOB_DAT  (6) -> dynsym 2 "moonbin_version" @ base+0x5008
+//       R_X86_64_RELATIVE  (8) -> no symbol, addend 0x1234 (must be skipped)
+//   [9] .rel.dyn   SHT_REL (9), link -> .dynsym(4), info -> .got(11)
+//       JMP_SLOT (7) -> dynsym 1 "printf"   @ base+0x5100
+//       GLOB_DAT (6) -> dynsym 2 "moonbin_version" @ base+0x5104
+//       (ELF64: R_X86_64_* with 32-bit symbol shift; ELF32: R_386_* with 8)
+//   [10] .got.plt  PROGBITS, [11] .got PROGBITS (targets, zero-filled)
+//   .dynamic gains DT_JMPREL(23) -> .rela.plt, DT_PLTRELSZ(2), DT_PLTREL(20)=7
+// The same bytes are dumped as "ELFCROSS rela64le" / "ELFCROSS rel32be" and
+// verified against `readelf -r` by test/elf_crosscheck.sh.
+// ---------------------------------------------------------------------------
+
+///|
+fn put_rela(
+  buf : Array[Byte],
+  class : Int,
+  endian : @core.Endian,
+  off : Int64,
+  info : Int64,
+  addend : Int64
+) -> Unit {
+  let aw = if class == 64 { 8 } else { 4 }
+  put_int(buf, off, aw, endian)
+  put_int(buf, info, aw, endian)
+  put_int(buf, addend, aw, endian)
+}
+
+///|
+fn put_rel(
+  buf : Array[Byte],
+  class : Int,
+  endian : @core.Endian,
+  off : Int64,
+  info : Int64
+) -> Unit {
+  let aw = if class == 64 { 8 } else { 4 }
+  put_int(buf, off, aw, endian)
+  put_int(buf, info, aw, endian)
+}
+
+///|
+fn build_elf_reloc(class : Int, endian : @core.Endian) -> Bytes {
+  let aw = if class == 64 { 8 } else { 4 }
+  let ehsize = if class == 64 { 64 } else { 52 }
+  let phentsize = if class == 64 { 56 } else { 32 }
+  let shentsize = if class == 64 { 64 } else { 40 }
+  let sym_es = if class == 64 { 24 } else { 16 }
+  let dyn_es = if class == 64 { 16 } else { 8 }
+  let rela_es = if class == 64 { 24 } else { 12 }
+  let rel_es = if class == 64 { 16 } else { 8 }
+  let machine = if class == 64 { 62 } else { 3 }
+  let base : Int64 = if class == 64 { 0x400000 } else { 0x01000000 }
+  let text_addr = base + 0x1000
+  let buf : Array[Byte] = []
+  put_zeros(buf, ehsize)
+  let phoff = buf.length()
+  put_zeros(buf, 2 * phentsize)
+  // .text
+  let text_off = buf.length()
+  buf.push((0x55 : Int).to_byte())
+  buf.push((0x48 : Int).to_byte())
+  buf.push((0x89 : Int).to_byte())
+  buf.push((0xE5 : Int).to_byte())
+  // .symtab: null + main + helper
+  let symtab_off = buf.length()
+  put_zeros(buf, sym_es)
+  put_sym(buf, class, endian, 1, 0x12, 1, text_addr, 4)
+  put_sym(buf, class, endian, 6, 0x11, 1, text_addr + 4, 8)
+  // .strtab
+  let strtab_off = buf.length()
+  put_str(buf, "")
+  put_str(buf, "main")
+  put_str(buf, "helper")
+  let strtab_size = buf.length() - strtab_off
+  // .dynsym: null + printf (undefined) + moonbin_version (defined)
+  let dynsym_off = buf.length()
+  put_zeros(buf, sym_es)
+  put_sym(buf, class, endian, 1, 0x12, 0, 0, 0)
+  put_sym(buf, class, endian, 8, 0x11, 1, base + 0x2000, 4)
+  // .dynstr
+  let dynstr_off = buf.length()
+  put_str(buf, "")
+  put_str(buf, "printf")
+  put_str(buf, "moonbin_version")
+  put_str(buf, "libc.so.6")
+  let dynstr_size = buf.length() - dynstr_off
+  // .dynamic: DT_NEEDED, DT_STRTAB, DT_JMPREL, DT_PLTRELSZ, DT_PLTREL, DT_NULL
+  let dyn_off = buf.length()
+  put_int(buf, 1, dyn_es / 2, endian)
+  put_int(buf, 24, dyn_es / 2, endian)
+  put_int(buf, 5, dyn_es / 2, endian)
+  put_int(buf, base + 0x3000, dyn_es / 2, endian)
+  let jmprel_pos = buf.length()
+  put_int(buf, 23, dyn_es / 2, endian)
+  put_int(buf, 0, dyn_es / 2, endian) // DT_JMPREL value patched below
+  put_int(buf, 2, dyn_es / 2, endian)
+  put_int(buf, (3 * rela_es).to_int64(), dyn_es / 2, endian)
+  put_int(buf, 20, dyn_es / 2, endian)
+  put_int(buf, 7, dyn_es / 2, endian) // DT_PLTREL = DT_RELA
+  put_int(buf, 0, dyn_es / 2, endian)
+  put_int(buf, 0, dyn_es / 2, endian)
+  // r_info symbol shift is 32 for ELF64, 8 for ELF32.
+  let info_shift = if class == 64 { 32 } else { 8 }
+  // .rela.plt: JUMP_SLOT printf, GLOB_DAT moonbin_version, RELATIVE (no sym)
+  let rela_off = buf.length()
+  put_rela(buf, class, endian, base + 0x5000, (1 << info_shift) | 7, 0)
+  put_rela(buf, class, endian, base + 0x5008, (2 << info_shift) | 6, 0)
+  put_rela(buf, class, endian, base + 0x5010, 8, 0x1234)
+  // .rel.dyn (SHT_REL, implicit addend): JMP_SLOT printf, GLOB_DAT
+  // moonbin_version.
+  let rel_off = buf.length()
+  put_rel(buf, class, endian, base + 0x5100, (1 << info_shift) | 7)
+  put_rel(buf, class, endian, base + 0x5104, (2 << info_shift) | 6)
+  // .got.plt and .got targets (zero-filled)
+  let gotplt_off = buf.length()
+  put_zeros(buf, 3 * aw)
+  let got_off = buf.length()
+  put_zeros(buf, 2 * aw)
+  // .shstrtab
+  let shstrtab_off = buf.length()
+  put_str(buf, "")
+  put_str(buf, ".text")
+  put_str(buf, ".symtab")
+  put_str(buf, ".strtab")
+  put_str(buf, ".dynsym")
+  put_str(buf, ".dynstr")
+  put_str(buf, ".dynamic")
+  put_str(buf, ".shstrtab")
+  put_str(buf, ".rela.plt")
+  put_str(buf, ".rel.dyn")
+  put_str(buf, ".got.plt")
+  put_str(buf, ".got")
+  let shstrtab_size = buf.length() - shstrtab_off
+  // Section header table: 12 sections.
+  let shoff = buf.length()
+  put_zeros(buf, shentsize) // [0] NULL
+  put_shdr(buf, class, endian, 1, 1, 6, text_addr, text_off.to_int64(), 4, 0, 0, 16, 0)
+  put_shdr(buf, class, endian, 7, 2, 0, 0, symtab_off.to_int64(), (3 * sym_es).to_int64(), 3, 1, 8, sym_es.to_int64())
+  put_shdr(buf, class, endian, 15, 3, 0, 0, strtab_off.to_int64(), strtab_size.to_int64(), 0, 0, 1, 0)
+  put_shdr(buf, class, endian, 23, 11, 2, base + 0x2000, dynsym_off.to_int64(), (3 * sym_es).to_int64(), 5, 1, 8, sym_es.to_int64())
+  put_shdr(buf, class, endian, 31, 3, 2, base + 0x3000, dynstr_off.to_int64(), dynstr_size.to_int64(), 0, 0, 1, 0)
+  put_shdr(buf, class, endian, 39, 6, 3, base + 0x4000, dyn_off.to_int64(), (6 * dyn_es).to_int64(), 5, 0, 8, dyn_es.to_int64())
+  put_shdr(buf, class, endian, 48, 3, 0, 0, shstrtab_off.to_int64(), shstrtab_size.to_int64(), 0, 0, 1, 0)
+  put_shdr(buf, class, endian, 58, 4, 0x42, base + 0x5000, rela_off.to_int64(), (3 * rela_es).to_int64(), 4, 10, 8, rela_es.to_int64())
+  put_shdr(buf, class, endian, 68, 9, 0x42, base + 0x5100, rel_off.to_int64(), (2 * rel_es).to_int64(), 4, 11, 8, rel_es.to_int64())
+  put_shdr(buf, class, endian, 77, 1, 3, base + 0x5000, gotplt_off.to_int64(), (3 * aw).to_int64(), 0, 0, 8, 0)
+  put_shdr(buf, class, endian, 86, 1, 3, base + 0x5100, got_off.to_int64(), (2 * aw).to_int64(), 0, 0, 8, 0)
+  let total = buf.length().to_int64()
+  // DT_JMPREL points at .rela.plt's mapped address.
+  patch_int(buf, jmprel_pos + dyn_es / 2, base + 0x5000, dyn_es / 2, endian)
+  patch_phdr(buf, phoff, class, endian, 1, 5, 0, base, total, 0x1000)
+  patch_phdr(buf, phoff + phentsize, class, endian, 2, 6, dyn_off.to_int64(), base + 0x4000, (6 * dyn_es).to_int64(), 8)
+  // ELF header.
+  buf[0] = (0x7F : Int).to_byte()
+  buf[1] = (0x45 : Int).to_byte()
+  buf[2] = (0x4C : Int).to_byte()
+  buf[3] = (0x46 : Int).to_byte()
+  let class_byte : Int = if class == 64 { 2 } else { 1 }
+  buf[4] = class_byte.to_byte()
+  let data_byte : Int = match endian {
+    @core.Endian::Little => 1
+    @core.Endian::Big => 2
+  }
+  buf[5] = data_byte.to_byte()
+  buf[6] = (1 : Int).to_byte()
+  patch_int(buf, 16, 2, 2, endian) // e_type = ET_EXEC
+  patch_int(buf, 18, machine.to_int64(), 2, endian)
+  patch_int(buf, 20, 1, 4, endian)
+  patch_int(buf, 24, text_addr, aw, endian)
+  patch_int(buf, 24 + aw, phoff.to_int64(), aw, endian)
+  patch_int(buf, 24 + 2 * aw, shoff.to_int64(), aw, endian)
+  patch_int(buf, 24 + 3 * aw, 0, 4, endian)
+  patch_int(buf, 28 + 3 * aw, ehsize.to_int64(), 2, endian)
+  patch_int(buf, 30 + 3 * aw, phentsize.to_int64(), 2, endian)
+  patch_int(buf, 32 + 3 * aw, 2, 2, endian)
+  patch_int(buf, 34 + 3 * aw, shentsize.to_int64(), 2, endian)
+  patch_int(buf, 36 + 3 * aw, 12, 2, endian) // e_shnum
+  patch_int(buf, 38 + 3 * aw, 7, 2, endian) // e_shstrndx
+  Bytes::from_array(buf)
+}
+
+test "elf64 rela.plt and rel.dyn import attribution" {
+  let elf = @elf.parse(build_elf_reloc(64, @core.Endian::Little)).unwrap()
+  assert_eq(elf.sections.length(), 12)
+  assert_eq(elf.sections[8].name, ".rela.plt")
+  assert_eq(elf.sections[9].name, ".rel.dyn")
+  assert_eq(elf.sections[10].name, ".got.plt")
+  assert_eq(elf.sections[11].name, ".got")
+  // JUMP_SLOT/GLOB_DAT from both tables; RELATIVE has no symbol.
+  assert_eq(elf.reloc_imports.length(), 4)
+  assert_eq(elf.reloc_imports[0].library, "libc.so.6")
+  assert_eq(elf.reloc_imports[0].name, "printf")
+  assert_eq(elf.reloc_imports[1].library, "libc.so.6")
+  assert_eq(elf.reloc_imports[1].name, "moonbin_version")
+  assert_eq(elf.reloc_imports[2].library, "libc.so.6")
+  assert_eq(elf.reloc_imports[2].name, "printf")
+  assert_eq(elf.reloc_imports[3].library, "libc.so.6")
+  assert_eq(elf.reloc_imports[3].name, "moonbin_version")
+  // Per-DT_NEEDED imports and everything else stay unchanged.
+  assert_eq(elf.imports.length(), 1)
+  assert_eq(elf.imports[0].library, "libc.so.6")
+  assert_eq(elf.imports[0].name, "")
+  assert_eq(elf.symbols.length(), 4)
+  assert_eq(elf.exports.length(), 1)
+  assert_eq(elf.exports[0].name, "moonbin_version")
+}
+
+test "elf32 rel import attribution (big endian)" {
+  let elf = @elf.parse(build_elf_reloc(32, @core.Endian::Big)).unwrap()
+  assert_eq(elf.sections.length(), 12)
+  assert_eq(elf.reloc_imports.length(), 4)
+  assert_eq(elf.reloc_imports[0].library, "libc.so.6")
+  assert_eq(elf.reloc_imports[0].name, "printf")
+  assert_eq(elf.reloc_imports[1].name, "moonbin_version")
+  assert_eq(elf.reloc_imports[2].name, "printf")
+  assert_eq(elf.reloc_imports[3].name, "moonbin_version")
+  assert_eq(elf.imports.length(), 1)
+  assert_eq(elf.imports[0].library, "libc.so.6")
+}
+
+///|
+fn read_u64le(b : Bytes, at : Int) -> Int64 {
+  let mut v : Int64 = 0
+  for i = 0; i < 8; i = i + 1 {
+    v = v | (b[at + i].to_int().to_int64() << (i * 8))
+  }
+  v
+}
+
+test "relocation symbol index out of range refused" {
+  let le = @core.Endian::Little
+  let b = build_elf_reloc(64, le)
+  let shoff = read_u64le(b, 40).to_int() // e_shoff
+  // section 8 (.rela.plt) sh_offset field at shoff + 8*64 + 24
+  let rela_off = read_u64le(b, shoff + 8 * 64 + 24)
+  // r_info of entry 0 at rela_off + 8; symbol index 99 -> out of range.
+  let bad = patched_int(b, rela_off.to_int() + 8, (99 << 32) | 7, 8, le)
+  assert_true(@elf.parse(bad) is Err(@core.ParseError::Invalid(_)))
+}
+
+test "relocation table with bad sh_link refused" {
+  let le = @core.Endian::Little
+  let b = build_elf_reloc(64, le)
+  let shoff = read_u64le(b, 40).to_int()
+  // section 8 sh_link at shoff + 8*64 + 40 -> 99 (out of range)
+  let bad = patched_int(b, shoff + 8 * 64 + 40, 99, 4, le)
+  assert_true(@elf.parse(bad) is Err(_))
+}
+
+test "relocation entry size mismatch refused" {
+  let le = @core.Endian::Little
+  let b = build_elf_reloc(64, le)
+  let shoff = read_u64le(b, 40).to_int()
+  // section 8 sh_entsize at shoff + 8*64 + 56 -> 8 (not 24)
+  let bad = patched_int(b, shoff + 8 * 64 + 56, 8, 8, le)
+  assert_true(@elf.parse(bad) is Err(@core.ParseError::Invalid(_)))
+}
+
+test "base elf fixture has empty reloc_imports" {
+  let elf = @elf.parse(build_elf(64, @core.Endian::Little)).unwrap()
+  assert_eq(elf.reloc_imports.length(), 0)
+  let elf32 = @elf.parse(build_elf(32, @core.Endian::Big)).unwrap()
+  assert_eq(elf32.reloc_imports.length(), 0)
+}
+
+test "crosscheck dump reloc fixtures" {
+  let r64 = build_elf_reloc(64, @core.Endian::Little)
+  let r32 = build_elf_reloc(32, @core.Endian::Big)
+  assert_eq(r64[0].to_int(), 0x7F)
+  assert_eq(r32[0].to_int(), 0x7F)
+  // Consumed by test/elf_crosscheck.sh (readelf -r).
+  println("ELFCROSS rela64le " + to_hex(r64))
+  println("ELFCROSS rel32be " + to_hex(r32))
+}

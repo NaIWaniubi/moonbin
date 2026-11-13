@@ -20,6 +20,16 @@ pub(all) struct Pe {
   imports : Array[@core.Import]
   exports : Array[@core.Export]
   symbols : Array[@core.Symbol]
+  /// Base relocations (data directory 5) as (rva, type) pairs, in block
+  /// order. Type 0 (IMAGE_REL_BASED_ABSOLUTE) padding entries are skipped.
+  relocations : Array[(Int64, Int)]
+  /// Delay-load imports (data directory 13), flattened across descriptors.
+  delay_imports : Array[@core.Import]
+  /// TLS callback VAs (data directory 9, AddressOfCallBacks array).
+  tls_callbacks : Array[Int64]
+  /// Top-level resource type ids (data directory 2): numeric ids plus
+  /// named types resolved to their negative name-RVA encoding.
+  resource_types : Array[Int]
 } derive(Debug)
 
 type PErr = @core.ParseError
@@ -139,10 +149,12 @@ fn parse_inner(data : Bytes) -> Pe raise PeFail {
     raise invalid("data directory count out of range")
   }
   let dirs : Array[Int64] = []
+  let dir_sizes : Array[Int64] = []
   for i = 0; i < ndir.to_int(); i = i + 1 {
     let drva = need(r.u32(le), "data directory RVA")
-    let _dsize = need(r.u32(le), "data directory size")
+    let dsize = need(r.u32(le), "data directory size")
     dirs.push(drva)
+    dir_sizes.push(dsize)
   }
   // Section table.
   let sec_start = opt_start + opt_size
@@ -185,6 +197,14 @@ fn parse_inner(data : Bytes) -> Pe raise PeFail {
   let imports = parse_imports(r, le, infos, dirs, is64, size_of_headers)
   let exports = parse_exports(r, le, infos, dirs, size_of_headers)
   let symbols = parse_symbols(r, le, symtab_ptr, num_symbols, strtab_start)
+  let relocations = parse_relocations(r, le, infos, dirs, dir_sizes, size_of_headers)
+  let delay_imports = parse_delay_imports(
+    r, le, infos, dirs, dir_sizes, is64, image_base, size_of_headers,
+  )
+  let tls_callbacks = parse_tls(
+    r, le, infos, dirs, dir_sizes, is64, image_base, size_of_headers,
+  )
+  let resource_types = parse_resource_types(r, le, infos, dirs, size_of_headers)
   {
     machine,
     is64,
@@ -194,6 +214,10 @@ fn parse_inner(data : Bytes) -> Pe raise PeFail {
     imports,
     exports,
     symbols,
+    relocations,
+    delay_imports,
+    tls_callbacks,
+    resource_types,
   }
 }
 
@@ -532,4 +556,299 @@ fn parse_symbols(
     pos = pos + 18 * (1 + naux)
   }
   out
+}
+
+/// Base relocation blocks (data directory 5). Each block covers one page
+/// (VirtualAddress) and carries u16 entries: high 4 bits type, low 12 bits
+/// page offset. Type 0 (ABSOLUTE) is padding and is skipped. Blocks must fit
+/// inside the directory size; anything else is refused, never guessed.
+fn parse_relocations(
+  r : @core.Reader,
+  le : @core.Endian,
+  infos : Array[SecInfo],
+  dirs : Array[Int64],
+  dir_sizes : Array[Int64],
+  size_of_headers : Int64,
+) -> Array[(Int64, Int)] raise PeFail {
+  let out : Array[(Int64, Int)] = []
+  if dirs.length() < 6 {
+    return out
+  }
+  let rva = dirs[5]
+  if rva == 0 {
+    return out
+  }
+  let dir_size = dir_sizes[5]
+  if dir_size < 8 {
+    raise invalid("relocation directory smaller than one block header")
+  }
+  let base_off = rva_to_offset(infos, rva, size_of_headers)
+  let file_len = r.length().to_int64()
+  let mut consumed : Int64 = 0
+  while consumed < dir_size {
+    if dir_size - consumed < 8 {
+      raise invalid("relocation block header runs past directory size")
+    }
+    let block_off = base_off.to_int64() + consumed
+    if block_off + 8 > file_len {
+      raise trunc("relocation block header")
+    }
+    let page_rva = u32_at(r, le, block_off.to_int(), "relocation page RVA")
+    let block_size = u32_at(
+      r, le, (block_off + 4).to_int(), "relocation block size",
+    )
+    if block_size < 8 || (block_size & 1) != 0 {
+      raise invalid("relocation block size invalid")
+    }
+    if block_size > dir_size - consumed {
+      raise invalid("relocation block runs past directory size")
+    }
+    if block_off + block_size > file_len {
+      raise trunc("relocation block entries")
+    }
+    let nentries = ((block_size - 8) / 2).to_int()
+    for i = 0; i < nentries; i = i + 1 {
+      let entry = u16_at(
+        r, le, (block_off + 8 + 2 * i.to_int64()).to_int(), "relocation entry",
+      )
+      let typ = (entry >> 12).to_int()
+      if typ != 0 {
+        out.push((page_rva + (entry & 0xFFF), typ))
+      }
+    }
+    consumed = consumed + block_size
+  }
+  out
+}
+
+/// Delay-load import descriptors (data directory 13, ImgDelayDescr).
+/// With attrs bit 0 (dlattrRva) set the pointer fields are RVAs (the modern
+/// convention); otherwise they are VAs and are converted through image_base.
+/// Thunk lists are walked like regular imports, preferring the INT.
+fn parse_delay_imports(
+  r : @core.Reader,
+  le : @core.Endian,
+  infos : Array[SecInfo],
+  dirs : Array[Int64],
+  dir_sizes : Array[Int64],
+  is64 : Bool,
+  image_base : Int64,
+  size_of_headers : Int64,
+) -> Array[@core.Import] raise PeFail {
+  let out : Array[@core.Import] = []
+  if dirs.length() < 14 {
+    return out
+  }
+  let rva = dirs[13]
+  if rva == 0 {
+    return out
+  }
+  let dir_size = dir_sizes[13]
+  if dir_size < 32 {
+    raise invalid("delay import directory smaller than one descriptor")
+  }
+  let mut off = rva_to_offset(infos, rva, size_of_headers)
+  let file_len = r.length().to_int64()
+  let thunk_size = if is64 { 8 } else { 4 }
+  let ordinal_flag : Int64 = if is64 { 0x8000000000000000 } else { 0x80000000 }
+  let mut consumed : Int64 = 0
+  while consumed + 32 <= dir_size {
+    if off.to_int64() + 32 > file_len {
+      raise trunc("delay import descriptor")
+    }
+    let attrs = u32_at(r, le, off, "delay import attrs")
+    let name_ptr = u32_at(r, le, off + 4, "delay import DLL name")
+    let _hmod = u32_at(r, le, off + 8, "delay import HMODULE")
+    let int_ptr = u32_at(r, le, off + 12, "delay import INT")
+    let iat_ptr = u32_at(r, le, off + 16, "delay import IAT")
+    let _bound = u32_at(r, le, off + 20, "delay import bound IAT")
+    let _unload = u32_at(r, le, off + 24, "delay import unload IAT")
+    let _ts = u32_at(r, le, off + 28, "delay import timestamp")
+    if attrs == 0 && name_ptr == 0 && int_ptr == 0 && iat_ptr == 0 {
+      break // all-zero terminator descriptor
+    }
+    let rva_based = (attrs & 1) != 0
+    let ptr_rva = fn(p : Int64) -> Int64 {
+      if rva_based { p } else { p - image_base }
+    }
+    if name_ptr == 0 {
+      raise invalid("delay import descriptor without DLL name")
+    }
+    let library = cstring_at(
+      r,
+      rva_to_offset(infos, ptr_rva(name_ptr), size_of_headers),
+      "delay import DLL name",
+    )
+    let thunk_ptr = if int_ptr != 0 { int_ptr } else { iat_ptr }
+    if thunk_ptr == 0 {
+      raise invalid("delay import descriptor without thunks")
+    }
+    let mut toff = rva_to_offset(infos, ptr_rva(thunk_ptr), size_of_headers)
+    while true {
+      guard r.seek(toff) else { raise trunc("delay import thunk") }
+      let thunk = if is64 {
+        need(r.u64(le), "delay import thunk")
+      } else {
+        need(r.u32(le), "delay import thunk")
+      }
+      if thunk == 0 {
+        break
+      }
+      if (thunk & ordinal_flag) != 0 {
+        let ord = thunk & 0xFFFF
+        out.push({ library, name: "#\{ord}" })
+      } else {
+        let hn_off = rva_to_offset(
+          infos, ptr_rva(thunk & (ordinal_flag - 1)), size_of_headers,
+        )
+        guard r.seek(hn_off) else { raise trunc("delay import hint/name") }
+        let _hint = need(r.u16(le), "delay import hint")
+        let name = match r.cstring() {
+          Some(s) => s
+          None => raise trunc("delay import symbol name")
+        }
+        out.push({ library, name })
+      }
+      toff = toff + thunk_size
+    }
+    off = off + 32
+    consumed = consumed + 32
+  }
+  out
+}
+
+/// TLS directory (data directory 9): the null-terminated AddressOfCallBacks
+/// array, reported as absolute VAs. The directory must be large enough to
+/// hold the AddressOfCallBacks field for the image class.
+fn parse_tls(
+  r : @core.Reader,
+  le : @core.Endian,
+  infos : Array[SecInfo],
+  dirs : Array[Int64],
+  dir_sizes : Array[Int64],
+  is64 : Bool,
+  image_base : Int64,
+  size_of_headers : Int64,
+) -> Array[Int64] raise PeFail {
+  let out : Array[Int64] = []
+  if dirs.length() < 10 {
+    return out
+  }
+  let rva = dirs[9]
+  if rva == 0 {
+    return out
+  }
+  let dir_size = dir_sizes[9]
+  let min_dir : Int64 = if is64 { 40 } else { 24 }
+  if dir_size < min_dir {
+    raise invalid("TLS directory smaller than AddressOfCallBacks field")
+  }
+  let base_off = rva_to_offset(infos, rva, size_of_headers)
+  // AddressOfCallBacks sits at offset 24 (PE32+) / 12 (PE32) and is a VA.
+  let cb_field = base_off + (if is64 { 24 } else { 12 })
+  let cb_va = if is64 {
+    u64_at(r, le, cb_field, "TLS AddressOfCallBacks")
+  } else {
+    u32_at(r, le, cb_field, "TLS AddressOfCallBacks")
+  }
+  if cb_va == 0 {
+    return out
+  }
+  let cb_rva = cb_va - image_base
+  if cb_rva <= 0 {
+    raise invalid("TLS callback array VA below image base")
+  }
+  let mut off = rva_to_offset(infos, cb_rva, size_of_headers)
+  let file_len = r.length().to_int64()
+  let ptr_size = if is64 { 8 } else { 4 }
+  while true {
+    if off.to_int64() + ptr_size.to_int64() > file_len {
+      raise trunc("TLS callback array")
+    }
+    let cb = if is64 {
+      u64_at(r, le, off, "TLS callback")
+    } else {
+      u32_at(r, le, off, "TLS callback")
+    }
+    if cb == 0 {
+      break
+    }
+    out.push(cb)
+    off = off + ptr_size
+  }
+  out
+}
+
+/// Resource directory (data directory 2): top-level type ids only. Numeric
+/// ids are reported as-is; named types are reported as the negative of their
+/// name RVA (the IMAGE_RESOURCE_NAME_IS_STRING encoding), since resolving the
+/// UTF-16 name is out of scope for v0.1. Child subtrees are bounds-checked
+/// but not flattened.
+fn parse_resource_types(
+  r : @core.Reader,
+  le : @core.Endian,
+  infos : Array[SecInfo],
+  dirs : Array[Int64],
+  size_of_headers : Int64,
+) -> Array[Int] raise PeFail {
+  let out : Array[Int] = []
+  if dirs.length() < 3 {
+    return out
+  }
+  let rva = dirs[2]
+  if rva == 0 {
+    return out
+  }
+  let root_off = rva_to_offset(infos, rva, size_of_headers)
+  let file_len = r.length().to_int64()
+  if root_off.to_int64() + 16 > file_len {
+    raise trunc("resource root directory")
+  }
+  let _chars = u32_at(r, le, root_off, "resource characteristics")
+  let _ts = u32_at(r, le, root_off + 4, "resource timestamp")
+  let _maj = u16_at(r, le, root_off + 8, "resource major version")
+  let _min = u16_at(r, le, root_off + 10, "resource minor version")
+  let nnamed = u16_at(r, le, root_off + 12, "resource named entry count")
+  let nid = u16_at(r, le, root_off + 14, "resource id entry count")
+  let count = nnamed + nid
+  // Every entry is 8 bytes and must fit in the file.
+  if count > (file_len - root_off.to_int64() - 16) / 8 {
+    raise invalid("resource entry count exceeds file size")
+  }
+  for i = 0; i < count.to_int(); i = i + 1 {
+    let eoff = root_off + 16 + 8 * i
+    let name_field = u32_at(r, le, eoff, "resource entry name")
+    let offset_field = u32_at(r, le, eoff + 4, "resource entry offset")
+    let id = if (name_field & 0x80000000) != 0 {
+      // Named type: keep the name-RVA encoding, negated. The RVA must map
+      // to real file bytes (the UTF-16 name itself is not decoded here).
+      let name_rva = name_field & 0x7FFFFFFF
+      if name_rva == 0 {
+        raise invalid("resource name RVA is zero")
+      }
+      let _ = rva_to_offset(infos, name_rva, size_of_headers)
+      -(name_rva.to_int())
+    } else {
+      name_field.to_int()
+    }
+    if (offset_field & 0x80000000) != 0 {
+      // Subdirectory: validate the child header lies inside the file.
+      let child = (offset_field & 0x7FFFFFFF).to_int()
+      if child < 16 || root_off.to_int64() + child.to_int64() + 16 > file_len {
+        raise invalid("resource subdirectory offset out of range")
+      }
+    }
+    out.push(id)
+  }
+  out
+}
+
+fn u64_at(
+  r : @core.Reader,
+  le : @core.Endian,
+  off : Int,
+  what : String,
+) -> Int64 raise PeFail {
+  guard r.seek(off) else { raise trunc(what) }
+  need(r.u64(le), what)
 }
