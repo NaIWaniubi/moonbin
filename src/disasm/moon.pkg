@@ -1,0 +1,9 @@
+// disasm: x86-64 decoder (common integer + basic SSE subset).
+// -6: unused package warnings during incremental development.
+// -9: Insn is constructed by downstream packages (not yet wired).
+// -79: derive(Debug) method promotion (toolchain deprecation, cosmetic).
+import {
+  "NaIWaniubi/moonbin/src/core",
+}
+
+warnings = "-6-9-79"

@@ -1,0 +1,27 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "NaIWaniubi/moonbin/src/disasm"
+
+import {
+  "NaIWaniubi/moonbin/src/core",
+  "moonbitlang/core/debug",
+}
+
+// Values
+pub fn decode(Bytes, Int64) -> Result[Insn, @core.ParseError]
+
+pub fn disassemble(Bytes, Int64, Int32) -> Array[Insn]
+
+// Errors
+
+// Types and methods
+pub(all) struct Insn {
+  addr : Int64
+  len : Int32
+  mnemonic : String
+  op_str : String
+  bytes : Bytes
+} derive(@debug.Debug)
+
+// Type aliases
+
+// Traits
