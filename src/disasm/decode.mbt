@@ -305,6 +305,18 @@ fn decode_inner(
 /// One-byte opcode dispatch (0x0F escapes to `two_byte`).
 fn Dec::insn(self : Dec) -> Result[(String, String), @core.ParseError] {
   let op = self.u8()
+  if op == 0x9B {
+    return Ok(("wait", ""))
+  }
+  if op >= 0xD8 && op <= 0xDF {
+    return self.x87(op)
+  }
+  if op == 0xC4 || op == 0xC5 {
+    return self.vex(op)
+  }
+  if op == 0x90 && self.rep == 0xF3 {
+    return Ok(("pause", ""))
+  }
   if op == 0x0F {
     return self.two_byte()
   }
@@ -667,7 +679,7 @@ fn Dec::insn(self : Dec) -> Result[(String, String), @core.ParseError] {
     }
     return Err(invalid("FF /3 or /5 (far call/jmp)"))
   }
-  Err(invalid("unsupported one-byte opcode"))
+  self.cheap_one(op)
 }
 
 /// Two-byte (0F) opcode dispatch: jcc/setcc/cmovcc, movzx/movsx, SSE, groups.
@@ -960,5 +972,5 @@ fn Dec::two_byte(self : Dec) -> Result[(String, String), @core.ParseError] {
     }
     return Err(invalid("0F AE /reg"))
   }
-  Err(invalid("unsupported two-byte opcode"))
+  self.cheap_two(op)
 }

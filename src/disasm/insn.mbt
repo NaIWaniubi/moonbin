@@ -125,7 +125,9 @@ fn ptr_text(size : Int) -> String {
     2 => "word ptr "
     4 => "dword ptr "
     8 => "qword ptr "
+    10 => "tbyte ptr "
     16 => "xmmword ptr "
+    32 => "ymmword ptr "
     _ => ""
   }
 }
@@ -160,7 +162,13 @@ let xmm_names : Array[String] = [
   "xmm8", "xmm9", "xmm10", "xmm11", "xmm12", "xmm13", "xmm14", "xmm15",
 ]
 
-/// Register name for a 0..15 index at the given operand size (128 = xmm).
+let ymm_names : Array[String] = [
+  "ymm0", "ymm1", "ymm2", "ymm3", "ymm4", "ymm5", "ymm6", "ymm7",
+  "ymm8", "ymm9", "ymm10", "ymm11", "ymm12", "ymm13", "ymm14", "ymm15",
+]
+
+/// Register name for a 0..15 index at the given operand size (128 = xmm,
+/// 256 = ymm).
 fn gpr_name(size : Int, idx : Int, has_rex : Bool) -> String {
   match size {
     64 => gpr64_names[idx]
@@ -172,6 +180,7 @@ fn gpr_name(size : Int, idx : Int, has_rex : Bool) -> String {
       gpr8_names[idx]
     }
     128 => xmm_names[idx]
+    256 => ymm_names[idx]
     _ => "?"
   }
 }
