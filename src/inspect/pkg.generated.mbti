@@ -1,0 +1,31 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "NaIWaniubi/moonbin/src/inspect"
+
+import {
+  "NaIWaniubi/moonbin/src/core",
+  "moonbitlang/core/debug",
+}
+
+// Values
+pub fn entropy(Bytes) -> Float
+
+pub fn section_entropy(Bytes, Array[@core.Region]) -> Array[SectionEntropy]
+
+pub fn strings(Bytes, Int32) -> Array[StringHit]
+
+// Errors
+
+// Types and methods
+pub(all) struct SectionEntropy {
+  name : String
+  entropy : Float
+} derive(Eq, @debug.Debug)
+
+pub(all) struct StringHit {
+  offset : Int64
+  text : String
+} derive(Eq, @debug.Debug)
+
+// Type aliases
+
+// Traits
