@@ -13,3 +13,7 @@ keywords = [ "binary", "pe", "elf", "disassembler", "reverse-engineering" ]
 preferred_target = "native"
 
 description = "Pure MoonBit binary format parsing and x86-64 disassembly"
+
+import {
+  "moonbitlang/x@0.5.1",
+}

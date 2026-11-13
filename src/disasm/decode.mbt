@@ -6,6 +6,9 @@
 priv struct Dec {
   r : @core.Reader
   addr : Int64
+  /// Cursor position at instruction start; the reader may be shared across a
+  /// whole disassembly, so relative targets must subtract this.
+  start : Int
   mut rex : Int
   mut has_rex : Bool
   mut opsize : Int
@@ -263,7 +266,7 @@ fn Dec::read_imm(self : Dec, size : Int) -> Int64 {
 
 /// Branch target text: absolute address = addr + encoded length + rel.
 fn Dec::target(self : Dec, rel : Int64) -> String {
-  hex_u64(self.addr + self.r.position().to_int64() + rel)
+  hex_u64(self.addr + (self.r.position() - self.start).to_int64() + rel)
 }
 
 fn decode_inner(
@@ -273,6 +276,7 @@ fn decode_inner(
   let d : Dec = {
     r,
     addr,
+    start: r.position(),
     rex: 0,
     has_rex: false,
     opsize: 32,

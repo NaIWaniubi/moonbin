@@ -1,7 +1,17 @@
 import {
   "NaIWaniubi/moonbin/src/core",
+  "NaIWaniubi/moonbin/src/pe",
+  "NaIWaniubi/moonbin/src/elf",
+  "NaIWaniubi/moonbin/src/disasm",
+  "NaIWaniubi/moonbin/src/format",
+  "moonbitlang/x/fs",
+  "moonbitlang/x/sys",
+  "moonbitlang/core/env",
+  "moonbitlang/core/string",
 }
 
 options(
   "is-main": true,
 )
+
+warnings = "-6-9-79"

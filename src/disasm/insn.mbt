@@ -49,7 +49,23 @@ pub fn disassemble(data : Bytes, addr : Int64, count : Int) -> Array[Insn] {
         out.push({ addr: a, len, mnemonic: mn, op_str: ops, bytes })
         a = a + len.to_int64()
       }
-      Err(_) => break
+      Err(e) => {
+        match e {
+          Truncated(_) => break
+          _ => {
+            // Outside the supported subset: report the raw byte faithfully and
+            // keep going, rather than silently truncating the dump.
+            let b = data[start]
+            let _ = r.seek(start + 1)
+            out.push({
+              addr: a, len: 1, mnemonic: ".byte",
+              op_str: hex_u64(b.to_int().to_int64()),
+              bytes: Bytes::makei(1, fn(_) { b }),
+            })
+            a = a + 1
+          }
+        }
+      }
     }
   }
   out

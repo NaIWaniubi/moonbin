@@ -1,0 +1,25 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "NaIWaniubi/moonbin/src/format"
+
+import {
+  "moonbitlang/core/debug",
+}
+
+// Values
+pub fn detect(Bytes) -> Format
+
+pub fn name(Format) -> String
+
+// Errors
+
+// Types and methods
+pub(all) enum Format {
+  Pe
+  Elf
+  MachO
+  Unknown
+} derive(Eq, @debug.Debug)
+
+// Type aliases
+
+// Traits

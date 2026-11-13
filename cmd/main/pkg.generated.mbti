@@ -6,6 +6,7 @@ package "NaIWaniubi/moonbin/cmd/main"
 // Errors
 
 // Types and methods
+type View
 
 // Type aliases
 
