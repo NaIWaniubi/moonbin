@@ -1,5 +1,4 @@
 import {
-  "NaIWaniubi/moonbin/src/core",
 }
 
 warnings = "-6-9-79"

@@ -25,7 +25,7 @@ fn hex(v : Int64) -> String {
   while x > 0 {
     let d = (x % 16).to_int()
     let code = if d < 10 { 48 + d } else { 87 + d }
-    out = String::from_array([Char::from_int(code)]) + out
+    out = String::from_array([code.unsafe_to_char()]) + out
     x = x / 16
   }
   "0x" + out

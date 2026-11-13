@@ -282,7 +282,7 @@ fn patched_int(
 
 ///|
 fn hex_digit(v : Int) -> Char {
-  Char::from_int(if v < 10 { 48 + v } else { 87 + v })
+  (if v < 10 { 48 + v } else { 87 + v }).unsafe_to_char()
 }
 
 ///|

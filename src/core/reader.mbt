@@ -151,7 +151,7 @@ pub fn Reader::cstring(self : Reader) -> String? {
     if b == 0 {
       return Some(String::from_array(chars))
     }
-    chars.push(Char::from_int(b))
+    chars.push(b.unsafe_to_char())
   }
   None
 }

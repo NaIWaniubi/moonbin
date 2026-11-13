@@ -26,7 +26,7 @@ fn assert_insn_list(
   base : Int64,
   expected : Array[(String, Int)]
 ) -> Unit raise {
-  let insns = disassemble(data, base, expected.length())
+  let insns = @disasm.disassemble(data, base, expected.length())
   assert_eq(insns.length(), expected.length())
   let mut a = base
   let mut off = 0

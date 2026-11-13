@@ -6,15 +6,15 @@ fn b(arr : Array[Int]) -> Bytes {
   Bytes::from_array(arr.map(fn(x) { x.to_byte() }))
 }
 
-fn ok(data : Bytes, addr : Int64) -> Insn {
-  match decode(data, addr) {
+fn ok(data : Bytes, addr : Int64) -> @disasm.Insn {
+  match @disasm.decode(data, addr) {
     Ok(ins) => ins
     Err(_) => abort("decode refused a valid encoding")
   }
 }
 
 fn expect_invalid(data : Bytes) -> Unit raise {
-  match decode(data, 0L) {
+  match @disasm.decode(data, 0L) {
     Err(@core.ParseError::Invalid(_)) => ()
     Ok(ins) => {
       inspect(ins.mnemonic, content="expected Invalid refusal, but decoded:")
@@ -26,7 +26,7 @@ fn expect_invalid(data : Bytes) -> Unit raise {
 }
 
 fn expect_truncated(data : Bytes) -> Unit raise {
-  match decode(data, 0L) {
+  match @disasm.decode(data, 0L) {
     Err(@core.ParseError::Truncated(_)) => ()
     Ok(ins) => {
       inspect(ins.mnemonic, content="expected Truncated refusal, but decoded:")
@@ -311,28 +311,28 @@ test "decode: unknown / unsupported opcodes refuse with Invalid" {
 
 test "disassemble: count limit, address continuity, .byte on refusal" {
   let data = b([0x90, 0x90, 0xd6, 0x90])
-  let two = disassemble(data, 0x1000L, 2)
+  let two = @disasm.disassemble(data, 0x1000L, 2)
   assert_eq(two.length(), 2)
   assert_eq(two[0].addr, 0x1000L)
   assert_eq(two[1].addr, 0x1001L)
   // 0xd6 is outside the subset: emitted as a raw .byte row, then decoding
   // continues instead of silently truncating.
-  let all = disassemble(data, 0x1000L, 10)
+  let all = @disasm.disassemble(data, 0x1000L, 10)
   assert_eq(all.length(), 4)
   assert_eq(all[2].mnemonic, ".byte")
   assert_eq(all[2].addr, 0x1002L)
   assert_eq(all[3].mnemonic, "nop")
   assert_eq(all[3].addr, 0x1003L)
-  assert_eq(disassemble(data, 0L, 0).length(), 0)
-  assert_eq(disassemble(Bytes::from_array([]), 0L, 5).length(), 0)
-  let exact = disassemble(b([0xc3]), 0x2000L, 99)
+  assert_eq(@disasm.disassemble(data, 0L, 0).length(), 0)
+  assert_eq(@disasm.disassemble(Bytes::from_array([]), 0L, 5).length(), 0)
+  let exact = @disasm.disassemble(b([0xc3]), 0x2000L, 99)
   assert_eq(exact.length(), 1)
   assert_eq(exact[0].addr, 0x2000L)
 }
 
 test "disassemble: bytes field matches the source slice" {
   let data = b([0x48, 0x89, 0xe5, 0x48, 0x83, 0xec, 0x20])
-  let insns = disassemble(data, 0L, 2)
+  let insns = @disasm.disassemble(data, 0L, 2)
   assert_eq(insns.length(), 2)
   assert_eq(insns[1].bytes[0].to_int(), 0x48)
   assert_eq(insns[1].bytes[3].to_int(), 0x20)
