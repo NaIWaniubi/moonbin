@@ -234,7 +234,12 @@ fn prefix(b : Bytes, n : Int) -> Bytes {
 fn ok_pe(r : Result[@pe.Pe, @core.ParseError]) -> @pe.Pe {
   match r {
     Ok(pe) => pe
-    Err(_) => abort("expected Ok from parse, got Err")
+    Err(@core.ParseError::Truncated(m)) =>
+      abort("expected Ok from parse, got Truncated: " + m)
+    Err(@core.ParseError::Invalid(m)) =>
+      abort("expected Ok from parse, got Invalid: " + m)
+    Err(@core.ParseError::BadMagic(m)) =>
+      abort("expected Ok from parse, got BadMagic: " + m)
   }
 }
 
@@ -384,6 +389,334 @@ test "single byte mutations never panic" {
         (golden[i].to_int() ^ 0xFF).to_byte()
       } else {
         golden[i]
+      }
+    })
+    let _ = @pe.parse(mutated)
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Extended fixture: golden image + a third section ".extra" (VA 0x3000, raw
+// 0x400 @ 0x600) carrying base relocations (dir 5), a resource tree (dir 2),
+// TLS (dir 9) and delay imports (dir 13). File size 0xA00.
+//
+//   .extra rel 0x000 RVA 0x3000: reloc block VA 0x1000, size 16:
+//       entries (type t, off 0), (t, 8), (0 ABSOLUTE pad, 0x10), (t, 0x18)
+//       where t = DIR64(10) for PE32+, HIGHLOW(3) for PE32
+//   .extra rel 0x010 RVA 0x3010: reloc block VA 0x2000, size 12: (t, 0x20), (t, 0x28)
+//   .extra rel 0x020 RVA 0x3020: resource root: 1 named ("RT_ICON" group,
+//       name RVA 0x30A8), 1 id (3); each child -> second level with one id
+//       entry (1) -> leaf data entry. Top-level types: [-12456, 3].
+//   .extra rel 0x080 RVA 0x3080: TLS directory (PE32+ 40 / PE32 24 bytes),
+//       AddressOfCallBacks -> RVA 0x30C0 array [base+0x1000, base+0x1020, 0]
+//   .extra rel 0x100 RVA 0x3100: one delay descriptor (attrs 1,
+//       "DELAYIMP.dll", INT -> 2 thunks: name "DelayFunc", ordinal 7)
+// ---------------------------------------------------------------------------
+
+/// Build the extended fixture; `is64` selects PE32+ vs PE32.
+fn build_pe_ext(is64 : Bool) -> Bytes {
+  let base = build_pe(is64)
+  let a : Array[Byte] = Array::make(0xA00, (0).to_byte())
+  for i = 0; i < base.length(); i = i + 1 {
+    a[i] = base[i]
+  }
+  let image_base : Int64 = if is64 { 0x140000000 } else { 0x10000000 }
+  put16(a, 0x46, 3) // NumberOfSections
+  put32(a, 0x58 + 56, 0x4000) // SizeOfImage
+  // third section header right after the two golden ones
+  let s3 = 0x58 + (if is64 { 240 } else { 224 }) + 80
+  putname(a, s3, ".extra")
+  put32(a, s3 + 8, 0x400) // VirtualSize
+  put32(a, s3 + 12, 0x3000) // VirtualAddress
+  put32(a, s3 + 16, 0x400) // SizeOfRawData
+  put32(a, s3 + 20, 0x600) // PointerToRawData
+  put32(a, s3 + 36, 0x40000040) // INITIALIZED_DATA | READ
+  // data directories 2 (resource), 5 (reloc), 9 (TLS), 13 (delay)
+  let d = 0x58 + (if is64 { 112 } else { 96 })
+  put32(a, d + 2 * 8, 0x3020)
+  put32(a, d + 2 * 8 + 4, 0x60)
+  put32(a, d + 5 * 8, 0x3000)
+  put32(a, d + 5 * 8 + 4, 0x1C) // 16 + 12 bytes of blocks
+  put32(a, d + 9 * 8, 0x3080)
+  put32(a, d + 9 * 8 + 4, if is64 { 40 } else { 24 })
+  put32(a, d + 13 * 8, 0x3100)
+  put32(a, d + 13 * 8 + 4, 64)
+  let x = 0x600 // .extra raw base, RVA base 0x3000
+  // base relocation blocks
+  let t = if is64 { 10 } else { 3 }
+  put32(a, x, 0x1000) // block 1 page RVA
+  put32(a, x + 4, 16) // block 1 size
+  put16(a, x + 8, (t << 12) | 0x000)
+  put16(a, x + 10, (t << 12) | 0x008)
+  put16(a, x + 12, 0x0010) // ABSOLUTE padding, must be skipped
+  put16(a, x + 14, (t << 12) | 0x018)
+  put32(a, x + 0x10, 0x2000) // block 2 page RVA
+  put32(a, x + 0x14, 12) // block 2 size
+  put16(a, x + 0x18, (t << 12) | 0x020)
+  put16(a, x + 0x1A, (t << 12) | 0x028)
+  // resource tree (root header 16 bytes, then 8-byte entries)
+  put16(a, x + 0x2C, 1) // root NumberOfNamedEntries
+  put16(a, x + 0x2E, 1) // root NumberOfIdEntries
+  put32(a, x + 0x30, 0x800030A8) // named entry: name RVA with high bit set
+  put32(a, x + 0x34, 0x80000040) // named entry -> subdir at rel 0x40
+  put32(a, x + 0x38, 3) // id entry: RT_ICON
+  put32(a, x + 0x3C, 0x80000050) // id entry -> subdir at rel 0x50
+  put16(a, x + 0x40, 0) // named subdir: 0 named
+  put16(a, x + 0x42, 1) // 1 id
+  put32(a, x + 0x44, 1)
+  put32(a, x + 0x48, 0x60) // -> leaf data entry at rel 0x60
+  put16(a, x + 0x50, 0)
+  put16(a, x + 0x52, 1)
+  put32(a, x + 0x54, 1)
+  put32(a, x + 0x58, 0x70) // -> leaf data entry at rel 0x70
+  put32(a, x + 0x60, 0x1000) // leaf 1 Data RVA
+  put32(a, x + 0x64, 4) // leaf 1 Size
+  put32(a, x + 0x70, 0x1004) // leaf 2 Data RVA
+  put32(a, x + 0x74, 4) // leaf 2 Size
+  // length-prefixed UTF-16 name "RT_ICON" at rel 0xA8
+  put16(a, x + 0xA8, 7)
+  let rname = "RT_ICON"
+  for i = 0; i < rname.length(); i = i + 1 {
+    put16(a, x + 0xAA + 2 * i, rname[i].to_int())
+  }
+  // TLS directory
+  let tls = x + 0x80
+  if is64 {
+    put64(a, tls, image_base + 0x1800) // StartAddressOfRawData
+    put64(a, tls + 8, image_base + 0x1810) // EndAddressOfRawData
+    put64(a, tls + 16, image_base + 0x2200) // AddressOfIndex
+    put64(a, tls + 24, image_base + 0x30C0) // AddressOfCallBacks
+  } else {
+    put32(a, tls, (image_base + 0x1800).to_int())
+    put32(a, tls + 4, (image_base + 0x1810).to_int())
+    put32(a, tls + 8, (image_base + 0x2200).to_int())
+    put32(a, tls + 12, (image_base + 0x30C0).to_int())
+  }
+  // TLS callback array at rel 0xC0 (RVA 0x30C0)
+  if is64 {
+    put64(a, x + 0xC0, image_base + 0x1000)
+    put64(a, x + 0xC8, image_base + 0x1020)
+  } else {
+    put32(a, x + 0xC0, (image_base + 0x1000).to_int())
+    put32(a, x + 0xC4, (image_base + 0x1020).to_int())
+  }
+  // delay import descriptor at rel 0x100 (RVA 0x3100)
+  let dl = x + 0x100
+  put32(a, dl, 1) // attrs: dlattrRva
+  put32(a, dl + 4, 0x3140) // DLL name RVA
+  put32(a, dl + 12, 0x3160) // INT RVA
+  put32(a, dl + 16, 0x3180) // IAT RVA
+  // INT at rel 0x160, IAT copy at rel 0x180
+  let thunk_size = if is64 { 8 } else { 4 }
+  let ordinal_flag : Int64 = if is64 { 0x8000000000000000 } else { 0x80000000 }
+  if is64 {
+    put64(a, x + 0x160, 0x31A0)
+    put64(a, x + 0x160 + thunk_size, ordinal_flag | 7)
+    put64(a, x + 0x180, 0x31A0)
+    put64(a, x + 0x180 + thunk_size, ordinal_flag | 7)
+  } else {
+    put32(a, x + 0x160, 0x31A0)
+    put32(a, x + 0x160 + thunk_size, (ordinal_flag | 7).to_int())
+    put32(a, x + 0x180, 0x31A0)
+    put32(a, x + 0x180 + thunk_size, (ordinal_flag | 7).to_int())
+  }
+  putstr(a, x + 0x140, "DELAYIMP.dll")
+  put16(a, x + 0x1A0, 0) // hint
+  putstr(a, x + 0x1A2, "DelayFunc")
+  Bytes::from_array(a)
+}
+
+test "pe32+ golden relocations" {
+  let pe = ok_pe(@pe.parse(build_pe_ext(true)))
+  assert_eq(pe.relocations.length(), 5)
+  assert_eq(pe.relocations[0], (0x1000, 10))
+  assert_eq(pe.relocations[1], (0x1008, 10))
+  assert_eq(pe.relocations[2], (0x1018, 10))
+  assert_eq(pe.relocations[3], (0x2020, 10))
+  assert_eq(pe.relocations[4], (0x2028, 10))
+}
+
+test "pe32 golden relocations" {
+  let pe = ok_pe(@pe.parse(build_pe_ext(false)))
+  assert_eq(pe.relocations.length(), 5)
+  assert_eq(pe.relocations[0], (0x1000, 3))
+  assert_eq(pe.relocations[1], (0x1008, 3))
+  assert_eq(pe.relocations[2], (0x1018, 3))
+  assert_eq(pe.relocations[3], (0x2020, 3))
+  assert_eq(pe.relocations[4], (0x2028, 3))
+}
+
+test "pe32+ golden delay imports" {
+  let pe = ok_pe(@pe.parse(build_pe_ext(true)))
+  assert_eq(pe.delay_imports.length(), 2)
+  assert_eq(pe.delay_imports[0].library, "DELAYIMP.dll")
+  assert_eq(pe.delay_imports[0].name, "DelayFunc")
+  assert_eq(pe.delay_imports[1].library, "DELAYIMP.dll")
+  assert_eq(pe.delay_imports[1].name, "#7")
+}
+
+test "pe32 golden delay imports" {
+  let pe = ok_pe(@pe.parse(build_pe_ext(false)))
+  assert_eq(pe.delay_imports.length(), 2)
+  assert_eq(pe.delay_imports[0].library, "DELAYIMP.dll")
+  assert_eq(pe.delay_imports[0].name, "DelayFunc")
+  assert_eq(pe.delay_imports[1].name, "#7")
+}
+
+test "pe32+ golden tls callbacks" {
+  let pe = ok_pe(@pe.parse(build_pe_ext(true)))
+  assert_eq(pe.tls_callbacks.length(), 2)
+  assert_eq(pe.tls_callbacks[0], 0x140001000)
+  assert_eq(pe.tls_callbacks[1], 0x140001020)
+}
+
+test "pe32 golden tls callbacks" {
+  let pe = ok_pe(@pe.parse(build_pe_ext(false)))
+  assert_eq(pe.tls_callbacks.length(), 2)
+  assert_eq(pe.tls_callbacks[0], 0x10001000)
+  assert_eq(pe.tls_callbacks[1], 0x10001020)
+}
+
+test "pe32+ golden resource types" {
+  let pe = ok_pe(@pe.parse(build_pe_ext(true)))
+  assert_eq(pe.resource_types.length(), 2)
+  // named type first: -(name RVA 0x30A8); then numeric id 3 (RT_ICON).
+  assert_eq(pe.resource_types[0], -12456)
+  assert_eq(pe.resource_types[1], 3)
+}
+
+test "pe32 golden resource types" {
+  let pe = ok_pe(@pe.parse(build_pe_ext(false)))
+  assert_eq(pe.resource_types.length(), 2)
+  assert_eq(pe.resource_types[0], -12456)
+  assert_eq(pe.resource_types[1], 3)
+}
+
+test "extended fixture keeps the base tables intact" {
+  let pe = ok_pe(@pe.parse(build_pe_ext(true)))
+  assert_eq(pe.imports.length(), 2)
+  assert_eq(pe.imports[0].library, "KERNEL32.dll")
+  assert_eq(pe.imports[0].name, "LoadLibraryA")
+  assert_eq(pe.imports[1].name, "GetProcAddress")
+  assert_eq(pe.exports.length(), 1)
+  assert_eq(pe.exports[0].name, "moonbin_export")
+  assert_eq(pe.sections.length(), 3)
+  assert_eq(pe.sections[2].name, ".extra")
+}
+
+test "base golden fixture has empty new fields" {
+  let pe64 = ok_pe(@pe.parse(build_pe(true)))
+  assert_eq(pe64.relocations.length(), 0)
+  assert_eq(pe64.delay_imports.length(), 0)
+  assert_eq(pe64.tls_callbacks.length(), 0)
+  assert_eq(pe64.resource_types.length(), 0)
+  let pe32 = ok_pe(@pe.parse(build_pe(false)))
+  assert_eq(pe32.relocations.length(), 0)
+  assert_eq(pe32.delay_imports.length(), 0)
+  assert_eq(pe32.tls_callbacks.length(), 0)
+  assert_eq(pe32.resource_types.length(), 0)
+}
+
+test "reloc block size below 8 refused" {
+  // block 1 SizeOfBlock lives at 0x604.
+  assert_eq(
+    err_kind(@pe.parse(patch32(build_pe_ext(true), 0x604, 4))),
+    "invalid",
+  )
+}
+
+test "reloc block size odd refused" {
+  assert_eq(
+    err_kind(@pe.parse(patch32(build_pe_ext(true), 0x604, 13))),
+    "invalid",
+  )
+}
+
+test "reloc block larger than directory refused" {
+  assert_eq(
+    err_kind(@pe.parse(patch32(build_pe_ext(true), 0x604, 0x100))),
+    "invalid",
+  )
+}
+
+test "unmapped reloc directory rva refused" {
+  // dir 5 RVA at 0xC8 + 40 = 0xF0.
+  assert_eq(
+    err_kind(@pe.parse(patch32(build_pe_ext(true), 0xF0, 0x0DEAD000))),
+    "invalid",
+  )
+}
+
+test "delay descriptor without thunks refused" {
+  // Zero both INT (0x70C) and IAT (0x710) so no thunk list remains.
+  let b = patch32(build_pe_ext(true), 0x70C, 0)
+  let b = patch32(b, 0x710, 0)
+  assert_eq(err_kind(@pe.parse(b)), "invalid")
+}
+
+test "delay descriptor falls back to IAT when INT is zero" {
+  let b = patch32(build_pe_ext(true), 0x70C, 0)
+  let pe = ok_pe(@pe.parse(b))
+  assert_eq(pe.delay_imports.length(), 2)
+  assert_eq(pe.delay_imports[0].name, "DelayFunc")
+  assert_eq(pe.delay_imports[1].name, "#7")
+}
+
+test "unmapped delay dll name refused" {
+  // name RVA at 0x700 + 4 = 0x704.
+  assert_eq(
+    err_kind(@pe.parse(patch32(build_pe_ext(true), 0x704, 0x0DEAD000))),
+    "invalid",
+  )
+}
+
+test "unmapped tls callback array refused" {
+  // AddressOfCallBacks (VA) at 0x680 + 24 = 0x698.
+  assert_eq(
+    err_kind(@pe.parse(patch64(build_pe_ext(true), 0x698, 0x140000000 + 0x9000))),
+    "invalid",
+  )
+}
+
+test "tls directory smaller than minimum refused" {
+  // dir 9 size at 0xC8 + 76 = 0x114.
+  assert_eq(
+    err_kind(@pe.parse(patch32(build_pe_ext(true), 0x114, 8))),
+    "invalid",
+  )
+}
+
+test "resource entry count beyond file refused" {
+  // root NumberOfIdEntries at 0x62E.
+  assert_eq(
+    err_kind(@pe.parse(patch16(build_pe_ext(true), 0x62E, 0x7FFF))),
+    "invalid",
+  )
+}
+
+test "resource child offset out of range refused" {
+  // first root entry offset at 0x634: subdir bit set, huge offset.
+  assert_eq(
+    err_kind(@pe.parse(patch32(build_pe_ext(true), 0x634, 0xFFFFFFFF))),
+    "invalid",
+  )
+}
+
+test "every strict prefix of the extended image is refused" {
+  let ext = build_pe_ext(true)
+  for i = 0; i < ext.length(); i = i + 1 {
+    assert_true(err_kind(@pe.parse(prefix(ext, i))) != "ok")
+  }
+}
+
+test "single byte mutations of the extended image never panic" {
+  let ext = build_pe_ext(true)
+  for off = 0; off < ext.length(); off = off + 1 {
+    let mutated = Bytes::makei(ext.length(), fn(i) {
+      if i == off {
+        (ext[i].to_int() ^ 0xFF).to_byte()
+      } else {
+        ext[i]
       }
     })
     let _ = @pe.parse(mutated)
