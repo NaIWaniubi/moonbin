@@ -1,0 +1,18 @@
+// web: wasm entry for the browser playground. Reads "input.bin" through the
+// host-provided fs glue and prints a single JSON report on stdout.
+import {
+  "NaIWaniubi/moonbin/src/core",
+  "NaIWaniubi/moonbin/src/pe",
+  "NaIWaniubi/moonbin/src/elf",
+  "NaIWaniubi/moonbin/src/disasm",
+  "NaIWaniubi/moonbin/src/format",
+  "NaIWaniubi/moonbin/src/inspect",
+  "moonbitlang/x/fs",
+  "moonbitlang/core/env",
+}
+
+options(
+  "is-main": true,
+)
+
+warnings = "-6-9-79"

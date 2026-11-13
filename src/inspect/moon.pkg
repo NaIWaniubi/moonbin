@@ -1,0 +1,8 @@
+// inspect: pure analysis helpers (printable strings, Shannon entropy).
+// Depends only on src/core (frozen contract). Never panics on any input.
+import {
+  "NaIWaniubi/moonbin/src/core",
+  "moonbitlang/core/math",
+}
+
+warnings = "-6-9-79"
