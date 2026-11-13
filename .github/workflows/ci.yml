@@ -1,0 +1,52 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  check-test:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install MoonBit
+        run: |
+          curl -fsSL https://cli.moonbitlang.com/install/unix.sh | bash
+        if: runner.os != 'Windows'
+      - name: Install MoonBit (Windows)
+        run: |
+          irm https://cli.moonbitlang.com/install/windows.ps1 | iex
+        if: runner.os == 'Windows'
+      - name: Add moon to PATH (unix)
+        run: echo "$HOME/.moon/bin" >> $GITHUB_PATH
+        if: runner.os != 'Windows'
+      - name: Check (deny warnings)
+        run: moon check --deny-warn
+      - name: Test
+        run: moon test
+      - name: Build native
+        run: moon build --target native --release cmd/main
+      - name: Build wasm
+        run: moon build --target wasm --release cmd/main
+
+  crosscheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install MoonBit
+        run: |
+          curl -fsSL https://cli.moonbitlang.com/install/unix.sh | bash
+          echo "$HOME/.moon/bin" >> $GITHUB_PATH
+      - name: Reference tools
+        run: |
+          sudo apt-get update && sudo apt-get install -y binutils
+          python3 -m pip install capstone
+      - name: PE cross-check (objdump)
+        run: bash test/pe_crosscheck.sh
+      - name: ELF cross-check (readelf)
+        run: bash test/elf_crosscheck.sh
+      - name: Disasm cross-check (capstone)
+        run: python3 -I test/disasm_crosscheck.py verify
