@@ -76,7 +76,15 @@ fn load_view(data : Bytes) -> Result[View, String] {
         Err(e) => Err("ELF parse refused: " + perr(e))
       }
     }
-    @format.MachO => Err("Mach-O detected but not supported in v0.1")
+    @format.MachO => {
+      match @macho.parse(data) {
+        Ok(m) => Ok({
+          format: "Mach-O", machine: m.cpu, entry: m.entry, base: 0,
+          sections: m.sections, symbols: m.symbols, imports: m.imports, exports: m.exports,
+        })
+        Err(e) => Err("Mach-O parse refused: " + perr(e))
+      }
+    }
     @format.Unknown => Err("unrecognized container magic")
   }
 }
