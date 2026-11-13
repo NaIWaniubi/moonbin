@@ -68,3 +68,25 @@ bytes refused as `.byte`.
   text, so operand formatting differences are not counted as errors.
 
 Every "no" above corresponds to a concrete `Err`/`.byte` branch in the code.
+
+## 6. v0.2 upgrades and the decisions behind them
+
+- **Mach-O** completes the big three containers (PE/ELF/Mach-O), 32/64 and both
+  endians, cross-checked against LIEF (77/77).
+- **x87 + VEX/AVX** were added to the disassembler. The x87 tables and the VEX
+  decoder are generated/validated against capstone 5 so mnemonic+length agree
+  exactly; on real `kernel32.dll` the `.byte` refusal count over a 400-insn window
+  dropped from dozens to ~1. Two of the slice's own unit tests were found to
+  contradict capstone (wrong VEX pp / REX.B bytes) and were corrected to capstone
+  truth rather than bending the decoder.
+- **Optional PE directories are best-effort.** The first v0.2 PE revision treated a
+  malformed/unmapped reloc/delay/TLS/resource table as fatal, which refused real
+  `kernel32.dll` (its optional RVAs are valid in memory but absent from the raw
+  file). Core headers/imports/exports remain strict; the four optional parsers now
+  fall back to an empty field on error. The corresponding tests assert best-effort
+  (Ok + empty), documenting the deliberate strictness split.
+- **strings / entropy** (`src/inspect`) and a **wasm playground** (`src/web`, `web/`)
+  expose the library in the browser; `test/web_e2e.mjs` verifies the wasm logic in
+  node and, when a working headless Chrome is present, the rendered DOM.
+- **fuzz** (`cmd/main/fuzz_test.mbt`): 1424 deterministic mutations across every
+  parser and the disassembler; a green run is evidence of the no-panic contract.

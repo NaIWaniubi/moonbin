@@ -197,14 +197,21 @@ fn parse_inner(data : Bytes) -> Pe raise PeFail {
   let imports = parse_imports(r, le, infos, dirs, is64, size_of_headers)
   let exports = parse_exports(r, le, infos, dirs, size_of_headers)
   let symbols = parse_symbols(r, le, symtab_ptr, num_symbols, strtab_start)
-  let relocations = parse_relocations(r, le, infos, dirs, dir_sizes, size_of_headers)
+  // Optional directories are best-effort: a malformed or unmapped optional
+  // table must not refuse the whole image (core headers/imports/exports stay
+  // strict above).
+  let relocations = parse_relocations(r, le, infos, dirs, dir_sizes, size_of_headers) catch {
+    _ => []
+  }
   let delay_imports = parse_delay_imports(
     r, le, infos, dirs, dir_sizes, is64, image_base, size_of_headers,
-  )
+  ) catch { _ => [] }
   let tls_callbacks = parse_tls(
     r, le, infos, dirs, dir_sizes, is64, image_base, size_of_headers,
-  )
-  let resource_types = parse_resource_types(r, le, infos, dirs, size_of_headers)
+  ) catch { _ => [] }
+  let resource_types = parse_resource_types(r, le, infos, dirs, size_of_headers) catch {
+    _ => []
+  }
   {
     machine,
     is64,

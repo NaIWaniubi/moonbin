@@ -1,8 +1,9 @@
 # moonbin
 
-**Pure-MoonBit binary format parsing and x86-64 disassembly.** Read real PE / ELF
-executables, walk their sections / symbols / imports / exports, and disassemble
-`.text` — with zero FFI, from the same MoonBit source compiled to native, wasm and js.
+**Pure-MoonBit binary format parsing and x86-64 disassembly.** Read real PE / ELF /
+Mach-O executables, walk their sections / symbols / imports / exports, disassemble
+`.text` (integer + SSE + x87 + VEX/AVX subset), and run strings / entropy analysis —
+with zero FFI, from the same MoonBit source compiled to native, wasm and js.
 
 Mature analogs in other ecosystems: `goblin` / `LIEF` / `pefile` (format parsing),
 `capstone` / `iced-x86` (disassembly). MoonBit had no equivalent; moonbin fills that gap.
@@ -15,54 +16,58 @@ entry    0x19a0
 base     0x140000000
 sections 7  symbols 0  imports 315  exports 0
 
-$ moonbin disasm kernel32.dll --count 4
-0x1000:  int3
-0x1001:  int3
-0x1002:  int3
-0x1003:  int3
+$ moonbin entropy kernel32.dll
+entropy 6.3952274 / 8.0
 ```
 
 ## Why it is trustworthy
 
 A parser that silently guesses is worse than one that refuses. Every read is
 bounds-checked; malformed input returns `Truncated` / `BadMagic` / `Invalid`,
-never a panic and never a fabricated field. The disassembler reports opcodes
-outside its supported subset as a raw `.byte` row and keeps going, instead of
-silently truncating the dump.
+never a panic and never a fabricated field. Core headers / imports / exports are
+strict; *optional* PE directories (relocs / delay-import / TLS / resources) are
+best-effort so a real DLL with an in-memory-only optional RVA still parses. The
+disassembler reports opcodes outside its subset as a raw `.byte` row and keeps
+going, instead of silently truncating the dump.
 
-Correctness is pinned against the reference tools, not asserted:
+Correctness is pinned against reference tools, not asserted:
 
-- **PE** — golden fixtures cross-checked with `objdump -x` (14/14), plus a real
-  `notepad.exe`: entry, image base, all 7 sections and all 315 imports (including
-  ordinal imports) match objdump exactly.
-- **ELF** — ELF64-LE and ELF32-BE fixtures cross-checked with `readelf -h -S -s -d`
-  (38/38 field/name/value matches).
-- **x86-64** — 199/199 mnemonic+length agreement with **capstone** on a fixed blob
-  and real `.text`; on 400-instruction windows of `kernel32.dll` / `notepad.exe`
-  the supported subset agrees 100% (119/119, 147/147), with x87 bytes honestly
-  refused as `.byte`.
+- **PE** — golden fixtures vs `objdump -x` (14/14) + real `notepad.exe`: entry, base,
+  7 sections, all 315 imports (incl. ordinals) match exactly.
+- **ELF** — ELF64-LE / ELF32-BE fixtures vs `readelf -h -S -s -d` (38/38).
+- **Mach-O** — Mach-O64-LE / Mach-O32-BE fixtures vs `lief` (77/77).
+- **x86-64** — 199/199 mnemonic+length vs **capstone** on a fixed blob; on 400-insn
+  windows of real `kernel32.dll` / `notepad.exe` the supported subset agrees 100%
+  with only ~1 `.byte` refusal (x87 now decoded).
+- **fuzz** — 1424 deterministic mutations across all parsers: no panic.
 
 ## Quickstart
 
 ```bash
-# MoonBit toolchain required
 moon check --deny-warn        # 0 errors, 0 warnings
-moon test                     # 62 tests
+moon test                     # 161 tests
 moon build --target native --release cmd/main
 bin=_build/native/release/build/cmd/main/main.exe
 
-$bin info     <file>          # format / machine / entry / base / counts
-$bin sections <file>          # name offset size vaddr flags
+$bin info     <file>
+$bin sections <file>
 $bin symbols  <file>
 $bin imports  <file>
 $bin exports  <file>
 $bin disasm   <file> [--count N]
-# add --json to any command for machine-readable output
+$bin strings  <file>          # ASCII runs >= 4
+$bin entropy  <file>          # Shannon entropy 0..8
+# add --json to any command
 
-# reference-tool cross-checks (need objdump / readelf / python+capstone)
+# reference-tool cross-checks (objdump / readelf / lief / capstone)
 bash test/pe_crosscheck.sh
 bash test/elf_crosscheck.sh
+python -I test/macho_crosscheck.py
 python -I test/disasm_crosscheck.py verify
+node test/web_e2e.mjs         # wasm playground smoke (+ DOM leg when Chrome present)
+
+# browser playground
+bash web/build.sh && (cd web && python -m http.server 8080)
 ```
 
 The same source builds to wasm: `moon build --target wasm --release cmd/main`.
@@ -72,19 +77,21 @@ The same source builds to wasm: `moon build --target wasm --release cmd/main`.
 | package | role |
 |---|---|
 | `src/core` | bounds-checked `Reader` + format-agnostic `Region/Symbol/Import/Export` |
-| `src/pe` | PE32 / PE32+ : DOS→NT→COFF→optional→sections→import/export/symbols |
-| `src/elf` | ELF32/64, both endians: headers, segments, symtab/dynsym, dynamic |
-| `src/disasm` | x86-64: prefixes, REX, ModR/M+SIB, disp/imm, common integer+SSE subset |
+| `src/pe` | PE32/PE32+ : headers, sections, import/export/symbols, relocs/delay/TLS/resources |
+| `src/elf` | ELF32/64 both endians: headers, segments, symtab/dynsym, dynamic, rela imports |
+| `src/macho` | Mach-O 32/64 both endians: segments/sections, symtab, dylibs, entry |
+| `src/disasm` | x86-64: prefixes/REX/ModR/M/SIB, integer+SSE+x87+VEX/AVX subset |
+| `src/inspect` | strings / Shannon entropy |
 | `src/format` | magic-based container detection |
-| `cmd/main` | CLI: info/sections/symbols/imports/exports/disasm, `--json` |
+| `src/web` + `web/` | single-file wasm playground |
+| `cmd/main` | CLI: info/sections/symbols/imports/exports/disasm/strings/entropy, `--json` |
 
 ## Supported / not supported (honest boundaries)
 
-- PE32 & PE32+; ELF32 & ELF64, little & big endian. Mach-O detected but refused (v0.1).
-- x86-64 common integer + basic SSE subset. AVX/VEX/EVEX, x87, MMX, far transfers
-  return `Invalid` (single `decode`) or `.byte` (streaming `disassemble`).
-- ELF imports are per-`DT_NEEDED` library (no per-symbol attribution — that would
-  require guessing). PE delay-imports not parsed.
+- PE32 & PE32+; ELF32 & ELF64; Mach-O 32 & 64; little & big endian where applicable.
+- x86-64 common integer + SSE + x87 FPU + VEX/AVX (map 1) subset. AVX2/AVX-512
+  (VEX map 2/3, EVEX), MMX, far transfers return `Invalid` / `.byte`.
+- ELF imports: per-`DT_NEEDED` plus per-symbol rela (JUMP_SLOT/GLOB_DAT) attribution.
 - No dynamic loading, no unpacking, no emulation. This is a static reader.
 
 ## License

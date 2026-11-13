@@ -198,6 +198,30 @@ fn print_disasm(data : Bytes, v : View, count : Int, json : Bool) -> Unit {
   }
 }
 
+fn print_strings(data : Bytes, json : Bool) -> Unit {
+  let hits = @inspect.strings(data, 4)
+  if json {
+    let items : Array[String] = []
+    for h in hits {
+      items.push("{\"offset\":\"\{hex(h.offset)}\",\"text\":\"\{jesc(h.text)}\"}")
+    }
+    println("[" + items.join(",") + "]")
+  } else {
+    for h in hits {
+      println("\{hex(h.offset)}\t\{h.text}")
+    }
+  }
+}
+
+fn print_entropy(data : Bytes, json : Bool) -> Unit {
+  let e = @inspect.entropy(data)
+  if json {
+    println("{\"entropy\":\{e}}")
+  } else {
+    println("entropy \{e} / 8.0")
+  }
+}
+
 fn parse_int(s : String) -> Int? {
   let mut n = 0
   let mut any = false
@@ -213,7 +237,7 @@ fn parse_int(s : String) -> Int? {
 }
 
 fn usage() -> Unit {
-  println("usage: moonbin <info|sections|symbols|imports|exports|disasm> <file> [--json] [--count N]")
+  println("usage: moonbin <info|sections|symbols|imports|exports|disasm|strings|entropy> <file> [--json] [--count N]")
 }
 
 fn main {
@@ -244,6 +268,15 @@ fn main {
       println("io error: \{msg}")
       abort("")
     }
+  }
+  // Raw-byte analyses do not require a parsed container.
+  if cmd == "strings" {
+    print_strings(data, json)
+    return
+  }
+  if cmd == "entropy" {
+    print_entropy(data, json)
+    return
   }
   let v = match load_view(data) {
     Ok(view) => view

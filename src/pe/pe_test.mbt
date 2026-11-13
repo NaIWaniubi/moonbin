@@ -617,41 +617,35 @@ test "base golden fixture has empty new fields" {
   assert_eq(pe32.resource_types.length(), 0)
 }
 
-test "reloc block size below 8 refused" {
-  // block 1 SizeOfBlock lives at 0x604.
-  assert_eq(
-    err_kind(@pe.parse(patch32(build_pe_ext(true), 0x604, 4))),
-    "invalid",
-  )
+// Optional directories are best-effort: a corrupt or unmapped optional table
+// yields an empty field, never a whole-image refusal (real DLLs routinely have
+// optional RVAs that are valid in memory but absent from the raw file).
+
+test "reloc block size below 8 tolerated (best-effort)" {
+  let pe = ok_pe(@pe.parse(patch32(build_pe_ext(true), 0x604, 4)))
+  assert_eq(pe.relocations.length(), 0)
 }
 
-test "reloc block size odd refused" {
-  assert_eq(
-    err_kind(@pe.parse(patch32(build_pe_ext(true), 0x604, 13))),
-    "invalid",
-  )
+test "reloc block size odd tolerated (best-effort)" {
+  let pe = ok_pe(@pe.parse(patch32(build_pe_ext(true), 0x604, 13)))
+  assert_eq(pe.relocations.length(), 0)
 }
 
-test "reloc block larger than directory refused" {
-  assert_eq(
-    err_kind(@pe.parse(patch32(build_pe_ext(true), 0x604, 0x100))),
-    "invalid",
-  )
+test "reloc block larger than directory tolerated (best-effort)" {
+  let pe = ok_pe(@pe.parse(patch32(build_pe_ext(true), 0x604, 0x100)))
+  assert_eq(pe.relocations.length(), 0)
 }
 
-test "unmapped reloc directory rva refused" {
-  // dir 5 RVA at 0xC8 + 40 = 0xF0.
-  assert_eq(
-    err_kind(@pe.parse(patch32(build_pe_ext(true), 0xF0, 0x0DEAD000))),
-    "invalid",
-  )
+test "unmapped reloc directory rva tolerated (best-effort)" {
+  let pe = ok_pe(@pe.parse(patch32(build_pe_ext(true), 0xF0, 0x0DEAD000)))
+  assert_eq(pe.relocations.length(), 0)
 }
 
-test "delay descriptor without thunks refused" {
-  // Zero both INT (0x70C) and IAT (0x710) so no thunk list remains.
+test "delay descriptor without thunks tolerated (best-effort)" {
   let b = patch32(build_pe_ext(true), 0x70C, 0)
   let b = patch32(b, 0x710, 0)
-  assert_eq(err_kind(@pe.parse(b)), "invalid")
+  let pe = ok_pe(@pe.parse(b))
+  assert_eq(pe.delay_imports.length(), 0)
 }
 
 test "delay descriptor falls back to IAT when INT is zero" {
@@ -662,44 +656,29 @@ test "delay descriptor falls back to IAT when INT is zero" {
   assert_eq(pe.delay_imports[1].name, "#7")
 }
 
-test "unmapped delay dll name refused" {
-  // name RVA at 0x700 + 4 = 0x704.
-  assert_eq(
-    err_kind(@pe.parse(patch32(build_pe_ext(true), 0x704, 0x0DEAD000))),
-    "invalid",
-  )
+test "unmapped delay dll name tolerated (best-effort)" {
+  let pe = ok_pe(@pe.parse(patch32(build_pe_ext(true), 0x704, 0x0DEAD000)))
+  assert_eq(pe.delay_imports.length(), 0)
 }
 
-test "unmapped tls callback array refused" {
-  // AddressOfCallBacks (VA) at 0x680 + 24 = 0x698.
-  assert_eq(
-    err_kind(@pe.parse(patch64(build_pe_ext(true), 0x698, 0x140000000 + 0x9000))),
-    "invalid",
-  )
+test "unmapped tls callback array tolerated (best-effort)" {
+  let pe = ok_pe(@pe.parse(patch64(build_pe_ext(true), 0x698, 0x140000000 + 0x9000)))
+  assert_eq(pe.tls_callbacks.length(), 0)
 }
 
-test "tls directory smaller than minimum refused" {
-  // dir 9 size at 0xC8 + 76 = 0x114.
-  assert_eq(
-    err_kind(@pe.parse(patch32(build_pe_ext(true), 0x114, 8))),
-    "invalid",
-  )
+test "tls directory smaller than minimum tolerated (best-effort)" {
+  let pe = ok_pe(@pe.parse(patch32(build_pe_ext(true), 0x114, 8)))
+  assert_eq(pe.tls_callbacks.length(), 0)
 }
 
-test "resource entry count beyond file refused" {
-  // root NumberOfIdEntries at 0x62E.
-  assert_eq(
-    err_kind(@pe.parse(patch16(build_pe_ext(true), 0x62E, 0x7FFF))),
-    "invalid",
-  )
+test "resource entry count beyond file tolerated (best-effort)" {
+  let pe = ok_pe(@pe.parse(patch16(build_pe_ext(true), 0x62E, 0x7FFF)))
+  assert_eq(pe.resource_types.length(), 0)
 }
 
-test "resource child offset out of range refused" {
-  // first root entry offset at 0x634: subdir bit set, huge offset.
-  assert_eq(
-    err_kind(@pe.parse(patch32(build_pe_ext(true), 0x634, 0xFFFFFFFF))),
-    "invalid",
-  )
+test "resource child offset out of range tolerated (best-effort)" {
+  let pe = ok_pe(@pe.parse(patch32(build_pe_ext(true), 0x634, 0xFFFFFFFF)))
+  assert_eq(pe.resource_types.length(), 0)
 }
 
 test "every strict prefix of the extended image is refused" {
