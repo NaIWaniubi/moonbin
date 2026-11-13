@@ -3,12 +3,17 @@
     {
       "root": "NaIWaniubi/moonbin",
       "rel": "cmd/main",
-      "artifact": "E:\\myzcode\\.zcode\\workspace\\draft-5214403b-eaf0-46d5-a05b-53d83f9a6850\\moonbin\\_build\\native\\debug\\test\\cmd\\main\\main.mi"
+      "artifact": "E:\\myzcode\\.zcode\\workspace\\draft-5214403b-eaf0-46d5-a05b-53d83f9a6850\\mb-pe\\_build\\native\\debug\\test\\cmd\\main\\main.mi"
     },
     {
       "root": "NaIWaniubi/moonbin",
       "rel": "src/core",
-      "artifact": "E:\\myzcode\\.zcode\\workspace\\draft-5214403b-eaf0-46d5-a05b-53d83f9a6850\\moonbin\\_build\\native\\debug\\test\\src\\core\\core.mi"
+      "artifact": "E:\\myzcode\\.zcode\\workspace\\draft-5214403b-eaf0-46d5-a05b-53d83f9a6850\\mb-pe\\_build\\native\\debug\\test\\src\\core\\core.mi"
+    },
+    {
+      "root": "NaIWaniubi/moonbin",
+      "rel": "src/pe",
+      "artifact": "E:\\myzcode\\.zcode\\workspace\\draft-5214403b-eaf0-46d5-a05b-53d83f9a6850\\mb-pe\\_build\\native\\debug\\test\\src\\pe\\pe.mi"
     },
     {
       "root": "moonbitlang/core",

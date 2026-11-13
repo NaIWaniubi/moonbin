@@ -1,0 +1,28 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "NaIWaniubi/moonbin/src/pe"
+
+import {
+  "NaIWaniubi/moonbin/src/core",
+  "moonbitlang/core/debug",
+}
+
+// Values
+pub fn parse(Bytes) -> Result[Pe, @core.ParseError]
+
+// Errors
+
+// Types and methods
+pub(all) struct Pe {
+  machine : Int32
+  is64 : Bool
+  entry : Int64
+  image_base : Int64
+  sections : Array[@core.Region]
+  imports : Array[@core.Import]
+  exports : Array[@core.Export]
+  symbols : Array[@core.Symbol]
+} derive(@debug.Debug)
+
+// Type aliases
+
+// Traits
