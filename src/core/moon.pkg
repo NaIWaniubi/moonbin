@@ -1,0 +1,4 @@
+// core: shared byte reader + format-agnostic types. Builtin prelude suffices.
+// -9: shared types are constructed by the pe/elf packages (not yet wired).
+// -79: derive(Debug) method promotion (toolchain deprecation, cosmetic).
+warnings = "-6-9-79"

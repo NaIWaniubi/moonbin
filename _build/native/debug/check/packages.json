@@ -1,0 +1,270 @@
+{
+  "source_dir": "E:\\myzcode\\.zcode\\workspace\\draft-5214403b-eaf0-46d5-a05b-53d83f9a6850\\moonbin",
+  "name": "NaIWaniubi/moonbin",
+  "packages": [
+    {
+      "is-main": true,
+      "is-third-party": false,
+      "root-path": "E:\\myzcode\\.zcode\\workspace\\draft-5214403b-eaf0-46d5-a05b-53d83f9a6850\\moonbin\\cmd\\main",
+      "root": "NaIWaniubi/moonbin",
+      "rel": "cmd/main",
+      "files": {
+        "E:\\myzcode\\.zcode\\workspace\\draft-5214403b-eaf0-46d5-a05b-53d83f9a6850\\moonbin\\cmd\\main\\main.mbt": {
+          "backend": [
+            "Wasm",
+            "WasmGC",
+            "Js",
+            "Native",
+            "LLVM"
+          ],
+          "optlevel": [
+            "Release",
+            "Debug"
+          ]
+        }
+      },
+      "wbtest-files": {},
+      "test-files": {},
+      "mbt-md-files": {},
+      "deps": [
+        {
+          "path": "NaIWaniubi/moonbin/src/core",
+          "alias": "core",
+          "fspath": "E:\\myzcode\\.zcode\\workspace\\draft-5214403b-eaf0-46d5-a05b-53d83f9a6850\\moonbin\\src\\core"
+        },
+        {
+          "path": "moonbitlang/core/prelude",
+          "alias": "prelude",
+          "fspath": "C:\\Users\\chen\\.moon\\lib\\core\\prelude"
+        }
+      ],
+      "wbtest-deps": [
+        {
+          "path": "moonbitlang/core/prelude",
+          "alias": "prelude",
+          "fspath": "C:\\Users\\chen\\.moon\\lib\\core\\prelude"
+        }
+      ],
+      "test-deps": [
+        {
+          "path": "moonbitlang/core/prelude",
+          "alias": "prelude",
+          "fspath": "C:\\Users\\chen\\.moon\\lib\\core\\prelude"
+        }
+      ],
+      "artifact": "E:\\myzcode\\.zcode\\workspace\\draft-5214403b-eaf0-46d5-a05b-53d83f9a6850\\moonbin\\_build\\native\\debug\\check\\cmd\\main\\main.mi",
+      "check-command": [
+        "check",
+        "-error-format",
+        "json",
+        "E:\\myzcode\\.zcode\\workspace\\draft-5214403b-eaf0-46d5-a05b-53d83f9a6850\\moonbin\\cmd\\main\\main.mbt",
+        "-o",
+        "E:\\myzcode\\.zcode\\workspace\\draft-5214403b-eaf0-46d5-a05b-53d83f9a6850\\moonbin\\_build\\native\\debug\\check\\cmd\\main\\main.mi",
+        "-pkg",
+        "NaIWaniubi/moonbin/cmd/main",
+        "-pkg-type",
+        "executable",
+        "-std-path",
+        "C:\\Users\\chen\\.moon\\lib\\core\\_build\\native\\release\\bundle",
+        "-i",
+        "E:\\myzcode\\.zcode\\workspace\\draft-5214403b-eaf0-46d5-a05b-53d83f9a6850\\moonbin\\_build\\native\\debug\\check\\src\\core\\core.mi:core",
+        "-i",
+        "C:\\Users\\chen\\.moon\\lib\\core\\_build\\native\\release\\bundle\\prelude\\prelude.mi:prelude",
+        "-pkg-sources",
+        "NaIWaniubi/moonbin/cmd/main:E:\\myzcode\\.zcode\\workspace\\draft-5214403b-eaf0-46d5-a05b-53d83f9a6850\\moonbin\\cmd\\main",
+        "-target",
+        "native",
+        "-workspace-path",
+        "E:\\myzcode\\.zcode\\workspace\\draft-5214403b-eaf0-46d5-a05b-53d83f9a6850\\moonbin",
+        "-all-pkgs",
+        "E:\\myzcode\\.zcode\\workspace\\draft-5214403b-eaf0-46d5-a05b-53d83f9a6850\\moonbin\\_build\\native\\debug\\check\\all_pkgs.json"
+      ],
+      "wbtest-check-command": null,
+      "test-check-command": [
+        "check",
+        "-error-format",
+        "json",
+        "-doctest-only",
+        "E:\\myzcode\\.zcode\\workspace\\draft-5214403b-eaf0-46d5-a05b-53d83f9a6850\\moonbin\\cmd\\main\\main.mbt",
+        "-include-doctests",
+        "-o",
+        "E:\\myzcode\\.zcode\\workspace\\draft-5214403b-eaf0-46d5-a05b-53d83f9a6850\\moonbin\\_build\\native\\debug\\check\\cmd\\main\\main.blackbox_test.mi",
+        "-pkg",
+        "NaIWaniubi/moonbin/cmd/main_blackbox_test",
+        "-pkg-type",
+        "library",
+        "-std-path",
+        "C:\\Users\\chen\\.moon\\lib\\core\\_build\\native\\release\\bundle",
+        "-i",
+        "E:\\myzcode\\.zcode\\workspace\\draft-5214403b-eaf0-46d5-a05b-53d83f9a6850\\moonbin\\_build\\native\\debug\\check\\src\\core\\core.mi:core",
+        "-i",
+        "E:\\myzcode\\.zcode\\workspace\\draft-5214403b-eaf0-46d5-a05b-53d83f9a6850\\moonbin\\_build\\native\\debug\\check\\cmd\\main\\main.mi:main",
+        "-i",
+        "C:\\Users\\chen\\.moon\\lib\\core\\_build\\native\\release\\bundle\\prelude\\prelude.mi:prelude",
+        "-pkg-sources",
+        "NaIWaniubi/moonbin/cmd/main_blackbox_test:E:\\myzcode\\.zcode\\workspace\\draft-5214403b-eaf0-46d5-a05b-53d83f9a6850\\moonbin\\cmd\\main",
+        "-target",
+        "native",
+        "-blackbox-test",
+        "-workspace-path",
+        "E:\\myzcode\\.zcode\\workspace\\draft-5214403b-eaf0-46d5-a05b-53d83f9a6850\\moonbin",
+        "-all-pkgs",
+        "E:\\myzcode\\.zcode\\workspace\\draft-5214403b-eaf0-46d5-a05b-53d83f9a6850\\moonbin\\_build\\native\\debug\\check\\all_pkgs.json"
+      ],
+      "supported-targets": [
+        "Wasm",
+        "WasmGC",
+        "Js",
+        "Native",
+        "LLVM"
+      ]
+    },
+    {
+      "is-main": false,
+      "is-third-party": false,
+      "root-path": "E:\\myzcode\\.zcode\\workspace\\draft-5214403b-eaf0-46d5-a05b-53d83f9a6850\\moonbin\\src\\core",
+      "root": "NaIWaniubi/moonbin",
+      "rel": "src/core",
+      "files": {
+        "E:\\myzcode\\.zcode\\workspace\\draft-5214403b-eaf0-46d5-a05b-53d83f9a6850\\moonbin\\src\\core\\reader.mbt": {
+          "backend": [
+            "Wasm",
+            "WasmGC",
+            "Js",
+            "Native",
+            "LLVM"
+          ],
+          "optlevel": [
+            "Release",
+            "Debug"
+          ]
+        },
+        "E:\\myzcode\\.zcode\\workspace\\draft-5214403b-eaf0-46d5-a05b-53d83f9a6850\\moonbin\\src\\core\\types.mbt": {
+          "backend": [
+            "Wasm",
+            "WasmGC",
+            "Js",
+            "Native",
+            "LLVM"
+          ],
+          "optlevel": [
+            "Release",
+            "Debug"
+          ]
+        }
+      },
+      "wbtest-files": {},
+      "test-files": {
+        "E:\\myzcode\\.zcode\\workspace\\draft-5214403b-eaf0-46d5-a05b-53d83f9a6850\\moonbin\\src\\core\\reader_test.mbt": {
+          "backend": [
+            "Wasm",
+            "WasmGC",
+            "Js",
+            "Native",
+            "LLVM"
+          ],
+          "optlevel": [
+            "Release",
+            "Debug"
+          ]
+        }
+      },
+      "mbt-md-files": {},
+      "deps": [
+        {
+          "path": "moonbitlang/core/prelude",
+          "alias": "prelude",
+          "fspath": "C:\\Users\\chen\\.moon\\lib\\core\\prelude"
+        }
+      ],
+      "wbtest-deps": [
+        {
+          "path": "moonbitlang/core/prelude",
+          "alias": "prelude",
+          "fspath": "C:\\Users\\chen\\.moon\\lib\\core\\prelude"
+        }
+      ],
+      "test-deps": [
+        {
+          "path": "moonbitlang/core/prelude",
+          "alias": "prelude",
+          "fspath": "C:\\Users\\chen\\.moon\\lib\\core\\prelude"
+        }
+      ],
+      "artifact": "E:\\myzcode\\.zcode\\workspace\\draft-5214403b-eaf0-46d5-a05b-53d83f9a6850\\moonbin\\_build\\native\\debug\\check\\src\\core\\core.mi",
+      "check-command": [
+        "check",
+        "-error-format",
+        "json",
+        "E:\\myzcode\\.zcode\\workspace\\draft-5214403b-eaf0-46d5-a05b-53d83f9a6850\\moonbin\\src\\core\\reader.mbt",
+        "E:\\myzcode\\.zcode\\workspace\\draft-5214403b-eaf0-46d5-a05b-53d83f9a6850\\moonbin\\src\\core\\types.mbt",
+        "-w",
+        "-6-9-79",
+        "-o",
+        "E:\\myzcode\\.zcode\\workspace\\draft-5214403b-eaf0-46d5-a05b-53d83f9a6850\\moonbin\\_build\\native\\debug\\check\\src\\core\\core.mi",
+        "-pkg",
+        "NaIWaniubi/moonbin/src/core",
+        "-pkg-type",
+        "library",
+        "-std-path",
+        "C:\\Users\\chen\\.moon\\lib\\core\\_build\\native\\release\\bundle",
+        "-i",
+        "C:\\Users\\chen\\.moon\\lib\\core\\_build\\native\\release\\bundle\\prelude\\prelude.mi:prelude",
+        "-pkg-sources",
+        "NaIWaniubi/moonbin/src/core:E:\\myzcode\\.zcode\\workspace\\draft-5214403b-eaf0-46d5-a05b-53d83f9a6850\\moonbin\\src\\core",
+        "-target",
+        "native",
+        "-workspace-path",
+        "E:\\myzcode\\.zcode\\workspace\\draft-5214403b-eaf0-46d5-a05b-53d83f9a6850\\moonbin",
+        "-all-pkgs",
+        "E:\\myzcode\\.zcode\\workspace\\draft-5214403b-eaf0-46d5-a05b-53d83f9a6850\\moonbin\\_build\\native\\debug\\check\\all_pkgs.json"
+      ],
+      "wbtest-check-command": null,
+      "test-check-command": [
+        "check",
+        "-error-format",
+        "json",
+        "E:\\myzcode\\.zcode\\workspace\\draft-5214403b-eaf0-46d5-a05b-53d83f9a6850\\moonbin\\src\\core\\reader_test.mbt",
+        "-doctest-only",
+        "E:\\myzcode\\.zcode\\workspace\\draft-5214403b-eaf0-46d5-a05b-53d83f9a6850\\moonbin\\src\\core\\reader.mbt",
+        "-doctest-only",
+        "E:\\myzcode\\.zcode\\workspace\\draft-5214403b-eaf0-46d5-a05b-53d83f9a6850\\moonbin\\src\\core\\types.mbt",
+        "-include-doctests",
+        "-w",
+        "-6-9-79",
+        "-o",
+        "E:\\myzcode\\.zcode\\workspace\\draft-5214403b-eaf0-46d5-a05b-53d83f9a6850\\moonbin\\_build\\native\\debug\\check\\src\\core\\core.blackbox_test.mi",
+        "-pkg",
+        "NaIWaniubi/moonbin/src/core_blackbox_test",
+        "-pkg-type",
+        "library",
+        "-std-path",
+        "C:\\Users\\chen\\.moon\\lib\\core\\_build\\native\\release\\bundle",
+        "-i",
+        "E:\\myzcode\\.zcode\\workspace\\draft-5214403b-eaf0-46d5-a05b-53d83f9a6850\\moonbin\\_build\\native\\debug\\check\\src\\core\\core.mi:core",
+        "-i",
+        "C:\\Users\\chen\\.moon\\lib\\core\\_build\\native\\release\\bundle\\prelude\\prelude.mi:prelude",
+        "-pkg-sources",
+        "NaIWaniubi/moonbin/src/core_blackbox_test:E:\\myzcode\\.zcode\\workspace\\draft-5214403b-eaf0-46d5-a05b-53d83f9a6850\\moonbin\\src\\core",
+        "-target",
+        "native",
+        "-blackbox-test",
+        "-workspace-path",
+        "E:\\myzcode\\.zcode\\workspace\\draft-5214403b-eaf0-46d5-a05b-53d83f9a6850\\moonbin",
+        "-all-pkgs",
+        "E:\\myzcode\\.zcode\\workspace\\draft-5214403b-eaf0-46d5-a05b-53d83f9a6850\\moonbin\\_build\\native\\debug\\check\\all_pkgs.json"
+      ],
+      "supported-targets": [
+        "Wasm",
+        "WasmGC",
+        "Js",
+        "Native",
+        "LLVM"
+      ]
+    }
+  ],
+  "deps": [],
+  "backend": "native",
+  "opt_level": "debug",
+  "source": null
+}

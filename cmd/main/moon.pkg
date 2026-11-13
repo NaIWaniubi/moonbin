@@ -1,0 +1,7 @@
+import {
+  "NaIWaniubi/moonbin/src/core",
+}
+
+options(
+  "is-main": true,
+)
