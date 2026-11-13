@@ -205,6 +205,18 @@ fn elf_report(e : @elf.Elf, data : Bytes) -> String {
   "," + raw_part(data) + "}"
 }
 
+fn macho_report(m : @macho.MachO, data : Bytes) -> String {
+  let machine_ok = m.cpu == 0x01000007 || m.cpu == 7
+  "{\"ok\":true,\"format\":\"Mach-O\",\"class\":\{m.class},\"machine\":\{m.cpu},\"entry\":\"\{hex(m.entry)}\",\"base\":\"0x0\"," +
+  "\"sections\":" + regions_json(m.sections) +
+  ",\"imports\":" + imports_json(m.imports) +
+  ",\"exports\":" + exports_json(m.exports) +
+  ",\"symbols\":" + symbols_json(m.symbols) +
+  ",\"disasm\":" + disasm_json(data, m.sections, machine_ok) +
+  ",\"section_entropy\":" + section_entropy_json(data, m.sections) +
+  "," + raw_part(data) + "}"
+}
+
 fn refused(format : String, msg : String, data : Bytes) -> String {
   "{\"ok\":false,\"format\":\"\{format}\",\"error\":\"\{jesc(msg)}\",\"sections\":[],\"imports\":[],\"exports\":[],\"symbols\":[],\"disasm\":{\"insns\":[],\"note\":\"\"},\"section_entropy\":[]," +
   raw_part(data) + "}"
@@ -224,7 +236,12 @@ fn report(data : Bytes) -> String {
         Err(e) => refused("ELF", perr(e), data)
       }
     }
-    @format.MachO => refused("Mach-O", "Mach-O detected but not supported in v0.1", data)
+    @format.MachO => {
+      match @macho.parse(data) {
+        Ok(m) => macho_report(m, data)
+        Err(e) => refused("Mach-O", perr(e), data)
+      }
+    }
     @format.Unknown => refused("unknown", "unrecognized container magic", data)
   }
 }

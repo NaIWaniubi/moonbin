@@ -4,6 +4,7 @@ import {
   "NaIWaniubi/moonbin/src/core",
   "NaIWaniubi/moonbin/src/pe",
   "NaIWaniubi/moonbin/src/elf",
+  "NaIWaniubi/moonbin/src/macho",
   "NaIWaniubi/moonbin/src/disasm",
   "NaIWaniubi/moonbin/src/format",
   "NaIWaniubi/moonbin/src/inspect",

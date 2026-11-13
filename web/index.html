@@ -31,6 +31,16 @@
   .info div span { color: #8b98ab; }
   .mn { color: #7ee787; }
   details summary { cursor: pointer; color: #9ecbff; font-size: 13px; margin-bottom: 6px; }
+  .cols { display: grid; grid-template-columns: 340px 1fr; gap: 18px; align-items: start; }
+  @media (max-width: 900px) { .cols { grid-template-columns: 1fr; } }
+  .hexview { background: #0b0e13; border: 1px solid #2a3342; border-radius: 6px; padding: 8px; font-size: 11px; line-height: 1.5; overflow-x: auto; max-height: 420px; overflow-y: auto; white-space: pre; }
+  .hexview .off { color: #8b98ab; }
+  .hexview .asc { color: #7ee787; }
+  .bar { height: 6px; border-radius: 3px; background: #22304a; overflow: hidden; min-width: 60px; }
+  .bar i { display: block; height: 100%; background: linear-gradient(90deg, #3fb950, #d29922, #f85149); }
+  .cfg { background: #0b0e13; border: 1px solid #2a3342; border-radius: 6px; padding: 8px; overflow-x: auto; }
+  .cfg svg text { font-family: ui-monospace, Consolas, monospace; }
+  .badge { display: inline-block; background: #243044; border: 1px solid #3a4a63; border-radius: 4px; padding: 2px 8px; margin-right: 6px; font-size: 12px; }
 </style>
 </head>
 <body>
@@ -210,6 +220,82 @@ if (typeof document !== 'undefined') {
     return n ? r.machine + ' (' + n + ')' : String(r.machine);
   }
 
+  let lastBytes = new Uint8Array(0);
+
+  function hexView(bytes) {
+    const pre = el('div', 'hexview');
+    const n = Math.min(bytes.length, 512);
+    let html = '';
+    for (let row = 0; row < n; row += 16) {
+      let hex = '', asc = '';
+      for (let i = 0; i < 16; i++) {
+        if (row + i < n) {
+          const b = bytes[row + i];
+          hex += b.toString(16).padStart(2, '0') + ' ';
+          asc += (b >= 32 && b < 127) ? String.fromCharCode(b) : '.';
+        } else { hex += '   '; asc += ' '; }
+      }
+      html += '<span class="off">' + row.toString(16).padStart(8, '0') + '</span>  ' + hex + ' <span class="asc">' + asc.replace(/&/g, '&amp;').replace(/</g, '&lt;') + '</span>\n';
+    }
+    pre.innerHTML = html;
+    return pre;
+  }
+
+  // Client-side basic-block CFG over the decoded instruction window.
+  function cfgSVG(insns) {
+    if (!insns.length) return null;
+    const addr = (s) => parseInt(s, 16);
+    const isBranch = (m) => /^(j|call|ret|loop|jrcxz|jecxz)/.test(m);
+    const leaders = new Set([addr(insns[0].addr)]);
+    insns.forEach((i, k) => {
+      const m = i.mnemonic;
+      if (/^j/.test(m) || m === 'call' || /^loop/.test(m)) {
+        const t = (i.op_str.match(/0x[0-9a-f]+/) || [])[0];
+        if (t) leaders.add(addr(t));
+        if (k + 1 < insns.length) leaders.add(addr(insns[k + 1].addr));
+      } else if (m === 'ret' || m === 'retf' || m === 'iretd' || m === 'iretq') {
+        if (k + 1 < insns.length) leaders.add(addr(insns[k + 1].addr));
+      }
+    });
+    const starts = [...leaders].filter((a) => insns.some((i) => addr(i.addr) === a)).sort((a, b) => a - b);
+    const blocks = starts.map((s, bi) => {
+      const end = bi + 1 < starts.length ? starts[bi + 1] : Infinity;
+      const body = insns.filter((i) => addr(i.addr) >= s && addr(i.addr) < end);
+      const last = body[body.length - 1];
+      const succs = [];
+      if (last) {
+        const m = last.mnemonic;
+        const t = (last.op_str.match(/0x[0-9a-f]+/) || [])[0];
+        if (/^j/.test(m) && m !== 'jmp' && t) succs.push(addr(t));
+        if (m === 'jmp' && t) succs.push(addr(t));
+        else if (m !== 'ret' && m !== 'retf' && m !== 'jmp' && bi + 1 < starts.length) succs.push(starts[bi + 1]);
+        if (/^j/.test(m) && m !== 'jmp' && bi + 1 < starts.length) succs.push(starts[bi + 1]);
+      }
+      return { start: s, count: body.length, succs: [...new Set(succs)] };
+    });
+    const W = 220, BH = 46, GAP = 26, H = blocks.length * (BH + GAP) + 10;
+    const y = (i) => 10 + i * (BH + GAP);
+    let svg = '<svg width="' + (W + 120) + '" height="' + H + '" xmlns="http://www.w3.org/2000/svg">';
+    svg += '<defs><marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0L10,5L0,10z" fill="#8b98ab"/></marker></defs>';
+    blocks.forEach((b, i) => {
+      b.succs.forEach((s) => {
+        const j = blocks.findIndex((x) => x.start === s);
+        if (j < 0) return;
+        const x1 = W + 10, y1 = y(i) + BH / 2, y2 = y(j) + BH / 2;
+        svg += '<path d="M' + x1 + ',' + y1 + ' C' + (x1 + 60) + ',' + y1 + ' ' + (x1 + 60) + ',' + y2 + ' ' + (W + 4) + ',' + y2 + '" fill="none" stroke="#8b98ab" marker-end="url(#ar)"/>';
+      });
+    });
+    blocks.forEach((b, i) => {
+      svg += '<rect x="10" y="' + y(i) + '" width="' + W + '" height="' + BH + '" rx="6" fill="#1a2332" stroke="#3a4a63"/>';
+      svg += '<text x="20" y="' + (y(i) + 19) + '" fill="#9ecbff" font-size="12">0x' + b.start.toString(16) + '</text>';
+      svg += '<text x="20" y="' + (y(i) + 35) + '" fill="#8b98ab" font-size="11">' + b.count + ' insn</text>';
+    });
+    svg += '</svg>';
+    const wrap = el('div', 'cfg');
+    wrap.innerHTML = svg;
+    return wrap;
+  }
+
   function renderReport(r) {
     outEl.textContent = '';
     if (!r.ok) {
@@ -240,6 +326,25 @@ if (typeof document !== 'undefined') {
         return [s.name, s.offset, s.size, s.vaddr, s.flags, se ? se.entropy.toFixed(4) : '-'];
       });
       addSection('Sections', makeTable(['name', 'offset', 'size', 'vaddr', 'flags', 'entropy'], rows));
+      const bars = el('div');
+      r.sections.forEach((s, i) => {
+        const se = r.section_entropy[i];
+        const e = se ? se.entropy : 0;
+        const row = el('div', null, '');
+        row.style.cssText = 'display:flex;align-items:center;gap:10px;margin:4px 0;font-size:12px;';
+        const label = el('span', null, s.name);
+        label.style.cssText = 'width:90px;color:#8b98ab;';
+        const bar = el('div', 'bar');
+        bar.style.flex = '1';
+        const fill = el('i');
+        fill.style.width = Math.min(100, (e / 8) * 100) + '%';
+        bar.appendChild(fill);
+        const val = el('span', null, e.toFixed(2));
+        val.style.width = '40px';
+        row.appendChild(label); row.appendChild(bar); row.appendChild(val);
+        bars.appendChild(row);
+      });
+      addSection('Section entropy (0..8 bits/byte)', bars);
     }
     if (r.ok && r.segments && r.segments.length > 0) {
       const rows = r.segments.map((s) => [s.name, s.offset, s.size, s.vaddr, s.flags]);
@@ -262,13 +367,26 @@ if (typeof document !== 'undefined') {
     }
     if (r.ok) {
       const d = r.disasm;
+      const cols = el('div', 'cols');
+      const left = el('div');
+      left.appendChild(el('h2', null, 'Hex (first 512 bytes)'));
+      left.appendChild(hexView(lastBytes));
+      cols.appendChild(left);
+      const right = el('div');
       if (d.insns.length > 0) {
+        right.appendChild(el('h2', null, 'Disassembly (.text, first ' + d.insns.length + ')'));
         const rows = d.insns.map((i) => [i.addr, i.bytes, i.mnemonic, i.op_str]);
-        addSection('Disassembly (.text, first ' + d.insns.length + ' instructions)',
-          makeTable(['addr', 'bytes', 'mnemonic', 'operands'], rows));
+        right.appendChild(makeTable(['addr', 'bytes', 'mnemonic', 'operands'], rows));
       } else {
-        addSection('Disassembly', null, d.note || 'no instructions decoded');
+        right.appendChild(el('h2', null, 'Disassembly'));
+        right.appendChild(el('div', 'note', d.note || 'no instructions decoded'));
       }
+      cols.appendChild(right);
+      const s = el('section');
+      s.appendChild(cols);
+      outEl.appendChild(s);
+      const cfg = cfgSVG(d.insns);
+      if (cfg) addSection('Control-flow graph (decoded window)', cfg);
     }
     if (r.strings.length > 0) {
       const rows = r.strings.map((s) => [s.offset, s.text]);
@@ -281,6 +399,7 @@ if (typeof document !== 'undefined') {
 
   function analyze(bytes, label) {
     if (!runtime) { setStatus('wasm not loaded yet', true); return; }
+    lastBytes = bytes;
     const t0 = performance.now();
     try {
       const res = runtime.run(bytes);

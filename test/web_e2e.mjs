@@ -265,7 +265,9 @@ async function headlessCheck(check) {
     check('headless: page rendered disassembly', dom.includes('int3'), diag);
   } finally {
     server.close();
-    rmSync(profile, { recursive: true, force: true });
+    // A hung browser may still hold the temp profile on Windows; cleanup is
+    // best-effort and must not fail the run.
+    try { rmSync(profile, { recursive: true, force: true }); } catch {}
   }
 }
 
@@ -401,7 +403,7 @@ console.log('raw / refused inputs:');
 }
 {
   const r = run(Uint8Array.from([0xfe, 0xed, 0xfa, 0xce, 0, 0, 0, 0]));
-  check('Mach-O detected but unsupported', r.ok === false && r.format === 'Mach-O' && /not supported/.test(r.error));
+  check('Mach-O detected and parsed (truncated fixture refused)', r.format === 'Mach-O' && r.ok === false && !/not supported/.test(r.error));
 }
 
 console.log('hex parser (page input path):');
