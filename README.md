@@ -15,6 +15,8 @@ Mature analogs in other ecosystems: `goblin` / `LIEF` / `pefile` (format parsing
 (native ≈ objdump, ~1.3× capstone, and the same code in-browser). The web workbench
 shows a live `ms · MB/s` badge, a source-line gutter (DWARF), hex, CFG and entropy bars.
 
+![moonbin demo](docs/demo.gif)
+
 ```
 $ moonbin info notepad.exe
 format   PE
