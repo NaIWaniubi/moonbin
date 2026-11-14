@@ -1,0 +1,9 @@
+// dwarf: DWARF v4/v5 line tables + DW_TAG_subprogram source mapping.
+// -6: unused package warnings during incremental development.
+// -9: LineEntry/FuncEntry are constructed by downstream packages (not yet wired).
+// -79: derive(Debug) method promotion (toolchain deprecation, cosmetic).
+import {
+  "NaIWaniubi/moonbin/src/core",
+}
+
+warnings = "-6-9-79"
