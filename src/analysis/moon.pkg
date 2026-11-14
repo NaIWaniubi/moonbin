@@ -3,7 +3,6 @@
 // -9: Block/cfg/callgraph are consumed by downstream packages (not yet wired).
 // -79: derive(Debug) method promotion (toolchain deprecation, cosmetic).
 import {
-  "NaIWaniubi/moonbin/src/core",
   "NaIWaniubi/moonbin/src/disasm",
 }
 

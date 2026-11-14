@@ -1,9 +1,11 @@
 # moonbin
 
-**Pure-MoonBit binary format parsing and x86-64 disassembly.** Read real PE / ELF /
-Mach-O executables, walk their sections / symbols / imports / exports, disassemble
-`.text` (integer + SSE + x87 + VEX/AVX subset), and run strings / entropy analysis —
-with zero FFI, from the same MoonBit source compiled to native, wasm and js.
+**Pure-MoonBit binary format parsing and x86-64 reverse-engineering.** Read real
+PE / ELF / Mach-O executables, walk their sections / symbols / imports / exports,
+disassemble `.text` (integer + SSE + x87 + VEX/AVX subset), build basic-block CFGs
+and direct call graphs, and run strings / entropy analysis — with zero FFI, from
+the same MoonBit source compiled to native, wasm and js, plus an in-browser RE
+workbench (hex + CFG + entropy bars).
 
 Mature analogs in other ecosystems: `goblin` / `LIEF` / `pefile` (format parsing),
 `capstone` / `iced-x86` (disassembly). MoonBit had no equivalent; moonbin fills that gap.
@@ -39,13 +41,15 @@ Correctness is pinned against reference tools, not asserted:
 - **x86-64** — 199/199 mnemonic+length vs **capstone** on a fixed blob; on 400-insn
   windows of real `kernel32.dll` / `notepad.exe` the supported subset agrees 100%
   with only ~1 `.byte` refusal (x87 now decoded).
+- **call graph** — 1227/1227 direct-call edges on real `notepad.exe` agree with
+  `objdump -d`.
 - **fuzz** — 1424 deterministic mutations across all parsers: no panic.
 
 ## Quickstart
 
 ```bash
 moon check --deny-warn        # 0 errors, 0 warnings
-moon test                     # 161 tests
+moon test                     # 174 tests
 moon build --target native --release cmd/main
 bin=_build/native/release/build/cmd/main/main.exe
 
@@ -55,6 +59,8 @@ $bin symbols  <file>
 $bin imports  <file>
 $bin exports  <file>
 $bin disasm   <file> [--count N]
+$bin cfg      <file>          # basic blocks + successors
+$bin callgraph <file>         # direct call edges
 $bin strings  <file>          # ASCII runs >= 4
 $bin entropy  <file>          # Shannon entropy 0..8
 # add --json to any command
@@ -64,7 +70,8 @@ bash test/pe_crosscheck.sh
 bash test/elf_crosscheck.sh
 python -I test/macho_crosscheck.py
 python -I test/disasm_crosscheck.py verify
-node test/web_e2e.mjs         # wasm playground smoke (+ DOM leg when Chrome present)
+python -I test/analysis_crosscheck.py
+node test/web_e2e.mjs         # wasm RE workbench smoke (+ DOM leg when Chrome present)
 
 # browser playground
 bash web/build.sh && (cd web && python -m http.server 8080)
@@ -81,6 +88,7 @@ The same source builds to wasm: `moon build --target wasm --release cmd/main`.
 | `src/elf` | ELF32/64 both endians: headers, segments, symtab/dynsym, dynamic, rela imports |
 | `src/macho` | Mach-O 32/64 both endians: segments/sections, symtab, dylibs, entry |
 | `src/disasm` | x86-64: prefixes/REX/ModR/M/SIB, integer+SSE+x87+VEX/AVX subset |
+| `src/analysis` | basic-block CFG + direct call graph over the decoded stream |
 | `src/inspect` | strings / Shannon entropy |
 | `src/format` | magic-based container detection |
 | `src/web` + `web/` | single-file wasm playground |

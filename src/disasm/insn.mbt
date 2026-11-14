@@ -54,15 +54,22 @@ pub fn disassemble(data : Bytes, addr : Int64, count : Int) -> Array[Insn] {
           Truncated(_) => break
           _ => {
             // Outside the supported subset: report the raw byte faithfully and
-            // keep going, rather than silently truncating the dump.
+            // keep going, rather than silently truncating the dump. A refused
+            // 0F escape consumes the escape plus its opcode byte (e.g. ud2),
+            // so the following bytes stay aligned.
             let b = data[start]
-            let _ = r.seek(start + 1)
-            out.push({
-              addr: a, len: 1, mnemonic: ".byte",
-              op_str: hex_u64(b.to_int().to_int64()),
-              bytes: Bytes::makei(1, fn(_) { b }),
-            })
-            a = a + 1
+            let wide = b.to_int() == 0x0F && start + 1 < data.length()
+            let n = if wide { 2 } else { 1 }
+            let _ = r.seek(start + n)
+            for k = 0; k < n; k = k + 1 {
+              let bb = data[start + k]
+              out.push({
+                addr: a + k.to_int64(), len: 1, mnemonic: ".byte",
+                op_str: hex_u64(bb.to_int().to_int64()),
+                bytes: Bytes::makei(1, fn(_) { bb }),
+              })
+            }
+            a = a + n.to_int64()
           }
         }
       }

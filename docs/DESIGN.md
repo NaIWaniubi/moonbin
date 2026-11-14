@@ -90,3 +90,20 @@ Every "no" above corresponds to a concrete `Err`/`.byte` branch in the code.
   node and, when a working headless Chrome is present, the rendered DOM.
 - **fuzz** (`cmd/main/fuzz_test.mbt`): 1424 deterministic mutations across every
   parser and the disassembler; a green run is evidence of the no-panic contract.
+
+## 7. v0.3: from parser to analysis platform
+
+- **CFG + call graph** (`src/analysis`): linear sweep over the decoded stream;
+  leaders at branch targets and after terminators; `call` falls through (never
+  splits a block). The block walk guarantees forward progress (a leader
+  immediately after the start still yields a one-insn block) so it can never
+  index before the buffer. Direct-call edges are cross-checked 1227/1227 against
+  `objdump -d` on real `notepad.exe` (addresses normalized by the image base).
+- **0F-escape alignment**: when the decoder refuses a `0F`-prefixed opcode, the
+  streaming disassembler consumes the escape *and* its opcode byte (e.g. `ud2`),
+  emitting two `.byte` rows so subsequent bytes stay aligned. Single-instruction
+  `decode` still reports `Invalid` for `ud2`, keeping the capstone cross-check's
+  refusal contract intact.
+- **RE workbench** (`web/`): the wasm playground now renders a hex view, per-section
+  entropy bars, and a client-side basic-block CFG alongside the tables, turning the
+  demo into a small in-browser reverse-engineering workbench.

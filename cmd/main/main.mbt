@@ -222,6 +222,70 @@ fn print_entropy(data : Bytes, json : Bool) -> Unit {
   }
 }
 
+fn text_code(data : Bytes, v : View) -> (Bytes, Int64)? {
+  for r in v.sections {
+    if r.name == ".text" {
+      let rd = @core.Reader::new(data)
+      if !rd.seek(r.offset.to_int()) {
+        return None
+      }
+      match rd.take(r.size.to_int()) {
+        Some(code) => return Some((code, r.vaddr))
+        None => return None
+      }
+    }
+  }
+  None
+}
+
+fn print_cfg(data : Bytes, v : View, json : Bool) -> Unit {
+  match text_code(data, v) {
+    None => println("no .text section")
+    Some((code, base)) => {
+      let blocks = @analysis.cfg(code, base)
+      if json {
+        let items : Array[String] = []
+        for b in blocks {
+          let ss : Array[String] = []
+          for s in b.succs {
+            ss.push("\"\{hex(s)}\"")
+          }
+          items.push("{\"start\":\"\{hex(b.start)}\",\"end\":\"\{hex(b.end)}\",\"succs\":[" + ss.join(",") + "]}")
+        }
+        println("[" + items.join(",") + "]")
+      } else {
+        for b in blocks {
+          let ss : Array[String] = []
+          for s in b.succs {
+            ss.push(hex(s))
+          }
+          println("\{hex(b.start)}..\{hex(b.end)}\t-> " + ss.join(", "))
+        }
+      }
+    }
+  }
+}
+
+fn print_callgraph(data : Bytes, v : View, json : Bool) -> Unit {
+  match text_code(data, v) {
+    None => println("no .text section")
+    Some((code, base)) => {
+      let edges = @analysis.callgraph(code, base)
+      if json {
+        let items : Array[String] = []
+        for (a, t) in edges {
+          items.push("{\"caller\":\"\{hex(a)}\",\"callee\":\"\{hex(t)}\"}")
+        }
+        println("[" + items.join(",") + "]")
+      } else {
+        for (a, t) in edges {
+          println("\{hex(a)}\t-> \{hex(t)}")
+        }
+      }
+    }
+  }
+}
+
 fn parse_int(s : String) -> Int? {
   let mut n = 0
   let mut any = false
@@ -292,6 +356,8 @@ fn main {
     "imports" => print_imports(v, json)
     "exports" => print_exports(v, json)
     "disasm" => print_disasm(data, v, count, json)
+    "cfg" => print_cfg(data, v, json)
+    "callgraph" => print_callgraph(data, v, json)
     _ => {
       usage()
       @sys.exit(2)

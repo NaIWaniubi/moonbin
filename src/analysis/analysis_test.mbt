@@ -1,5 +1,5 @@
 // Hand-crafted x86-64 blobs pinning the frozen analysis contract:
-//   Block { start, end (exclusive), succs }
+//   @analysis.Block { start, end (exclusive), succs }
 //   cfg: linear sweep, split at jmp/jcc targets and after jmp/jcc/ret;
 //        jcc -> [target, fallthrough], jmp -> [target], ret -> [],
 //        call falls through (never ends or splits a block),
@@ -11,7 +11,7 @@ fn xb(vals : Array[Int]) -> Bytes {
 }
 
 fn assert_blocks(
-  got : Array[Block],
+  got : Array[@analysis.Block],
   expected : Array[(Int64, Int64, Array[Int64])]
 ) -> Unit raise {
   assert_eq(got.length(), expected.length())
@@ -36,15 +36,15 @@ fn assert_edges(got : Array[(Int64, Int64)], expected : Array[(Int64, Int64)]) -
 
 test "cfg: empty code yields no blocks, no edges" {
   let empty = xb([])
-  assert_blocks(cfg(empty, 0x1000L), [])
-  assert_edges(callgraph(empty, 0x1000L), [])
+  assert_blocks(@analysis.cfg(empty, 0x1000L), [])
+  assert_edges(@analysis.callgraph(empty, 0x1000L), [])
 }
 
 test "cfg: straight-line code ending in ret is one block" {
   // 0x1000: mov rbp, rsp / sub rsp, 0x20 / ret
   let code = xb([0x48, 0x89, 0xE5, 0x48, 0x83, 0xEC, 0x20, 0xC3])
-  assert_blocks(cfg(code, 0x1000L), [(0x1000L, 0x1008L, [])])
-  assert_edges(callgraph(code, 0x1000L), [])
+  assert_blocks(@analysis.cfg(code, 0x1000L), [(0x1000L, 0x1008L, [])])
+  assert_edges(@analysis.callgraph(code, 0x1000L), [])
 }
 
 test "cfg: jcc splits at target and fallthrough, two succs" {
@@ -58,7 +58,7 @@ test "cfg: jcc splits at target and fallthrough, two succs" {
     0x48, 0x31, 0xC0, 0x74, 0x04, 0x48, 0xFF, 0xC0, 0xC3, 0x48, 0xFF, 0xC8,
     0xC3,
   ])
-  assert_blocks(cfg(code, 0x1000L), [
+  assert_blocks(@analysis.cfg(code, 0x1000L), [
     (0x1000L, 0x1005L, [0x1009L, 0x1005L]),
     (0x1005L, 0x1009L, []),
     (0x1009L, 0x100DL, []),
@@ -76,11 +76,11 @@ test "cfg: call falls through and never splits a block" {
     0xE8, 0x05, 0x00, 0x00, 0x00, 0x48, 0xFF, 0xC0, 0xC3, 0xCC, 0x48, 0x31,
     0xC0, 0xC3,
   ])
-  assert_blocks(cfg(code, 0x1000L), [
+  assert_blocks(@analysis.cfg(code, 0x1000L), [
     (0x1000L, 0x1009L, []),
     (0x1009L, 0x100EL, []),
   ])
-  assert_edges(callgraph(code, 0x1000L), [(0x1000L, 0x100AL)])
+  assert_edges(@analysis.callgraph(code, 0x1000L), [(0x1000L, 0x100AL)])
 }
 
 test "cfg: jmp rel32 forward and rel8 backward loop" {
@@ -91,12 +91,12 @@ test "cfg: jmp rel32 forward and rel8 backward loop" {
   let code = xb([
     0xE9, 0x05, 0x00, 0x00, 0x00, 0x48, 0xFF, 0xC0, 0xEB, 0xF6, 0xC3,
   ])
-  assert_blocks(cfg(code, 0x1000L), [
+  assert_blocks(@analysis.cfg(code, 0x1000L), [
     (0x1000L, 0x1005L, [0x100AL]),
     (0x1005L, 0x100AL, [0x1000L]),
     (0x100AL, 0x100BL, []),
   ])
-  assert_edges(callgraph(code, 0x1000L), [])
+  assert_edges(@analysis.callgraph(code, 0x1000L), [])
 }
 
 test "cfg: near jcc, ret imm, fallthrough edge into next block" {
@@ -108,7 +108,7 @@ test "cfg: near jcc, ret imm, fallthrough edge into next block" {
     0x0F, 0x85, 0x06, 0x00, 0x00, 0x00, 0xC2, 0x08, 0x00, 0x48, 0xFF, 0xC0,
     0xC3,
   ])
-  assert_blocks(cfg(code, 0x1000L), [
+  assert_blocks(@analysis.cfg(code, 0x1000L), [
     (0x1000L, 0x1006L, [0x100CL, 0x1006L]),
     (0x1006L, 0x1009L, []),
     (0x1009L, 0x100CL, [0x100CL]),
@@ -121,11 +121,11 @@ test "cfg: indirect call and jmp; callgraph keeps direct calls only" {
   // 0x1002: jmp rax           (2)  -> terminator, target unknown
   // 0x1004: ret               (1)
   let code = xb([0xFF, 0xD0, 0xFF, 0xE0, 0xC3])
-  assert_blocks(cfg(code, 0x1000L), [
+  assert_blocks(@analysis.cfg(code, 0x1000L), [
     (0x1000L, 0x1004L, []),
     (0x1004L, 0x1005L, []),
   ])
-  assert_edges(callgraph(code, 0x1000L), [])
+  assert_edges(@analysis.callgraph(code, 0x1000L), [])
 }
 
 test "cfg: .byte rows fall through without splitting" {
@@ -133,16 +133,16 @@ test "cfg: .byte rows fall through without splitting" {
   // 0x1002: inc rax           (3)
   // 0x1005: ret               (1)
   let code = xb([0x0F, 0x0B, 0x48, 0xFF, 0xC0, 0xC3])
-  assert_blocks(cfg(code, 0x1000L), [(0x1000L, 0x1006L, [])])
-  assert_edges(callgraph(code, 0x1000L), [])
+  assert_blocks(@analysis.cfg(code, 0x1000L), [(0x1000L, 0x1006L, [])])
+  assert_edges(@analysis.callgraph(code, 0x1000L), [])
 }
 
 test "cfg: truncated tail bytes are dropped, not guessed" {
   // 0x1000: inc rax           (3)
   // 0x1003: e8 00 00 -> truncated call, sweep stops here
   let code = xb([0x48, 0xFF, 0xC0, 0xE8, 0x00, 0x00])
-  assert_blocks(cfg(code, 0x1000L), [(0x1000L, 0x1003L, [])])
-  assert_edges(callgraph(code, 0x1000L), [])
+  assert_blocks(@analysis.cfg(code, 0x1000L), [(0x1000L, 0x1003L, [])])
+  assert_edges(@analysis.callgraph(code, 0x1000L), [])
 }
 
 test "callgraph: repeated direct calls keep sweep order and duplicates" {
@@ -155,12 +155,12 @@ test "callgraph: repeated direct calls keep sweep order and duplicates" {
     0xE8, 0x0B, 0x00, 0x00, 0x00, 0xE8, 0x06, 0x00, 0x00, 0x00, 0xE8, 0x01,
     0x00, 0x00, 0x00, 0xC3, 0xC3,
   ])
-  assert_edges(callgraph(code, 0x1000L), [
+  assert_edges(@analysis.callgraph(code, 0x1000L), [
     (0x1000L, 0x1010L),
     (0x1005L, 0x1010L),
     (0x100AL, 0x1010L),
   ])
-  assert_blocks(cfg(code, 0x1000L), [
+  assert_blocks(@analysis.cfg(code, 0x1000L), [
     (0x1000L, 0x1010L, []),
     (0x1010L, 0x1011L, []),
   ])
@@ -175,17 +175,17 @@ test "cfg: nonzero base address is honored everywhere" {
   let code = xb([
     0xE8, 0x05, 0x00, 0x00, 0x00, 0xC3, 0x48, 0x31, 0xC0, 0xC3,
   ])
-  assert_blocks(cfg(code, base), [
+  assert_blocks(@analysis.cfg(code, base), [
     (base, base + 6L, []),
     (base + 6L, base + 10L, []),
   ])
-  assert_edges(callgraph(code, base), [(base, base + 10L)])
+  assert_edges(@analysis.callgraph(code, base), [(base, base + 10L)])
 }
 
 test "cfg: jcc as last instruction still has two succs" {
   // 0x1000: je 0x1000 (self)  (2); fallthrough points past the buffer
   let code = xb([0x74, 0xFE])
-  assert_blocks(cfg(code, 0x1000L), [(0x1000L, 0x1002L, [0x1000L, 0x1002L])])
+  assert_blocks(@analysis.cfg(code, 0x1000L), [(0x1000L, 0x1002L, [0x1000L, 0x1002L])])
 }
 
 test "cfg: mixed blob stays sorted and non-overlapping; mid-insn target kept as edge" {
@@ -201,7 +201,7 @@ test "cfg: mixed blob stays sorted and non-overlapping; mid-insn target kept as 
     0x48, 0x31, 0xC0, 0x74, 0x02, 0xEB, 0x03, 0xC3, 0xE8, 0x02, 0x00, 0x00,
     0x00, 0xC3, 0x90, 0xC3,
   ])
-  let blocks = cfg(code, 0x1000L)
+  let blocks = @analysis.cfg(code, 0x1000L)
   assert_blocks(blocks, [
     (0x1000L, 0x1005L, [0x1007L, 0x1005L]),
     (0x1005L, 0x1007L, [0x100AL]),
@@ -219,5 +219,5 @@ test "cfg: mixed blob stays sorted and non-overlapping; mid-insn target kept as 
       assert_true(blocks[i - 1].end <= blocks[i].start)
     }
   }
-  assert_edges(callgraph(code, 0x1000L), [(0x1008L, 0x100FL)])
+  assert_edges(@analysis.callgraph(code, 0x1000L), [(0x1008L, 0x100FL)])
 }

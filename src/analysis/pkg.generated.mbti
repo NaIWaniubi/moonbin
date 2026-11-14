@@ -1,0 +1,24 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "NaIWaniubi/moonbin/src/analysis"
+
+import {
+  "moonbitlang/core/debug",
+}
+
+// Values
+pub fn callgraph(Bytes, Int64) -> Array[(Int64, Int64)]
+
+pub fn cfg(Bytes, Int64) -> Array[Block]
+
+// Errors
+
+// Types and methods
+pub(all) struct Block {
+  start : Int64
+  end : Int64
+  succs : Array[Int64]
+} derive(@debug.Debug)
+
+// Type aliases
+
+// Traits
