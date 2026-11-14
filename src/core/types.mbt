@@ -12,7 +12,7 @@ pub(all) enum ParseError {
   BadMagic(String)
   /// A field held a value the format does not allow.
   Invalid(String)
-} derive(Debug)
+} derive(Debug, Show)
 
 /// A named region of the file (section / segment).
 pub(all) struct Region {
