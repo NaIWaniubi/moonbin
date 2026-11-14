@@ -1,0 +1,10 @@
+// analysis: basic-block CFG + direct callgraph over the x86-64 disasm.
+// -6: unused package warnings during incremental development.
+// -9: Block/cfg/callgraph are consumed by downstream packages (not yet wired).
+// -79: derive(Debug) method promotion (toolchain deprecation, cosmetic).
+import {
+  "NaIWaniubi/moonbin/src/core",
+  "NaIWaniubi/moonbin/src/disasm",
+}
+
+warnings = "-6-9-79"
