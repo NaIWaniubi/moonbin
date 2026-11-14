@@ -17,6 +17,8 @@ shows a live `ms · MB/s` badge, a source-line gutter (DWARF), hex, CFG and entr
 
 ![moonbin demo](docs/demo.gif)
 
+![workbench](docs/workbench.png)
+
 ```
 $ moonbin info notepad.exe
 format   PE

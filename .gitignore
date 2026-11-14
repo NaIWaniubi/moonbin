@@ -2,3 +2,4 @@ _build/
 .mooncakes/
 *.exe
 *.dll
+docs/report.json
