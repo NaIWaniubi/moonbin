@@ -115,20 +115,6 @@ fn line_unit_v4(prologue : Array[Byte], program : Array[Byte]) -> Bytes {
 
 // v5 adds address_size + segment_selector_size between version and
 // header_length; those two bytes are NOT counted by header_length.
-fn line_unit_v5(prologue : Array[Byte], program : Array[Byte]) -> Bytes {
-  let body : Array[Byte] = []
-  push_u16(body, 5)
-  body.push((8).to_byte()) // address_size
-  body.push((0).to_byte()) // segment_selector_size
-  push_u32(body, prologue.length())
-  append(body, prologue)
-  append(body, program)
-  let out : Array[Byte] = []
-  push_u32(out, body.length())
-  append(out, body)
-  Bytes::from_array(out)
-}
-
 fn ext_set_address(p : Array[Byte], addr : Int64) -> Unit {
   p.push((0).to_byte())
   push_uleb(p, 9) // 1 subopcode byte + 8 address bytes
@@ -194,22 +180,6 @@ fn cu_v4(abbrev_offset : Int, address_size : Int, dies : Array[Byte]) -> Bytes {
   append(out, body)
   Bytes::from_array(out)
 }
-
-fn cu_v5(unit_type : Int, address_size : Int, abbrev_offset : Int, dies : Array[Byte]) -> Bytes {
-  let body : Array[Byte] = []
-  push_u16(body, 5)
-  body.push(unit_type.to_byte())
-  body.push(address_size.to_byte())
-  push_u32(body, abbrev_offset)
-  append(body, dies)
-  let out : Array[Byte] = []
-  push_u32(out, body.length())
-  append(out, body)
-  Bytes::from_array(out)
-}
-
-// ---------------------------------------------------------------------------
-// Region / assertion helpers.
 
 fn make_regions(names : Array[String], blobs : Array[Bytes]) -> (Bytes, Array[@core.Region]) {
   let arr : Array[Byte] = []
@@ -306,37 +276,6 @@ fn expect_lines_invalid(data : Bytes, regions : Array[@core.Region]) -> Unit rai
     }
   }
 }
-
-fn expect_funcs_invalid(data : Bytes, regions : Array[@core.Region]) -> Unit raise {
-  match @dwarf.decode_funcs(data, regions) {
-    Err(@core.ParseError::Invalid(_)) => ()
-    Ok(funcs) => {
-      inspect(funcs.length(), content="expected Invalid, decoded funcs:")
-      assert_true(false)
-    }
-    Err(e) => {
-      inspect(e, content="expected Invalid, got:")
-      assert_true(false)
-    }
-  }
-}
-
-fn expect_funcs_truncated(data : Bytes, regions : Array[@core.Region]) -> Unit raise {
-  match @dwarf.decode_funcs(data, regions) {
-    Err(@core.ParseError::Truncated(_)) => ()
-    Ok(funcs) => {
-      inspect(funcs.length(), content="expected Truncated, decoded funcs:")
-      assert_true(false)
-    }
-    Err(e) => {
-      inspect(e, content="expected Truncated, got:")
-      assert_true(false)
-    }
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Line program tests.
 
 test "line v4: copy, special, set_file, advance_pc/line, fixed and const add_pc" {
   let prologue = std_prologue(-5, 14, 13)
@@ -457,7 +396,7 @@ test "line: missing section and out-of-bounds region refused" {
   copy(p)
   ext_end_sequence(p)
   let unit = line_unit_v4(prologue, p)
-  let (data, regions) = one_region(".debug_line", unit)
+  let (data, _) = one_region(".debug_line", unit)
   expect_lines_invalid(data, [])
   let bad_regions : Array[@core.Region] = [
     { name: ".debug_line", offset: 100000L, size: 10L, vaddr: 0L, flags: "" },

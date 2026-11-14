@@ -286,6 +286,49 @@ fn print_callgraph(data : Bytes, v : View, json : Bool) -> Unit {
   }
 }
 
+fn print_dwarf(data : Bytes, v : View, json : Bool) -> Unit {
+  let lines = @dwarf.decode_lines(data, v.sections)
+  let funcs = @dwarf.decode_funcs(data, v.sections)
+  if json {
+    let ls : Array[String] = []
+    match lines {
+      Ok(rows) => {
+        for r in rows {
+          ls.push("{\"addr\":\"\{hex(r.addr)}\",\"file\":\"\{jesc(r.file)}\",\"line\":\{r.line}}")
+        }
+      }
+      Err(_) => ()
+    }
+    let fs : Array[String] = []
+    match funcs {
+      Ok(rows) => {
+        for f in rows {
+          fs.push("{\"name\":\"\{jesc(f.name)}\",\"low\":\"\{hex(f.low)}\",\"high\":\"\{hex(f.high)}\"}")
+        }
+      }
+      Err(_) => ()
+    }
+    println("{\"lines\":[" + ls.join(",") + "],\"funcs\":[" + fs.join(",") + "]}")
+  } else {
+    match lines {
+      Ok(rows) => {
+        for r in rows {
+          println("\{hex(r.addr)}\t\{r.file}:\{r.line}")
+        }
+      }
+      Err(e) => println("lines: " + perr(e))
+    }
+    match funcs {
+      Ok(rows) => {
+        for f in rows {
+          println("\{f.name}\t\{hex(f.low)}..\{hex(f.high)}")
+        }
+      }
+      Err(e) => println("funcs: " + perr(e))
+    }
+  }
+}
+
 fn parse_int(s : String) -> Int? {
   let mut n = 0
   let mut any = false
@@ -358,6 +401,7 @@ fn main {
     "disasm" => print_disasm(data, v, count, json)
     "cfg" => print_cfg(data, v, json)
     "callgraph" => print_callgraph(data, v, json)
+    "dwarf" => print_dwarf(data, v, json)
     _ => {
       usage()
       @sys.exit(2)

@@ -12,7 +12,7 @@ pub(all) enum ParseError {
   BadMagic(String)
   /// A field held a value the format does not allow.
   Invalid(String)
-} derive(Debug, Show)
+ } derive(Debug, Show)
 
 /// A named region of the file (section / segment).
 pub(all) struct Region {
@@ -25,7 +25,7 @@ pub(all) struct Region {
   vaddr : Int64
   /// Human-readable flags, e.g. "rx", "rw".
   flags : String
-} derive(Debug)
+ } derive(Debug, Show)
 
 /// A symbol table entry.
 pub(all) struct Symbol {
@@ -38,7 +38,7 @@ pub(all) struct Symbol {
   bind : String
   /// Section index, or -1 for undefined / absolute.
   shndx : Int
-} derive(Debug)
+ } derive(Debug, Show)
 
 /// An imported symbol (PE import table / ELF dynamic).
 pub(all) struct Import {
@@ -46,11 +46,11 @@ pub(all) struct Import {
   library : String
   /// Symbol name, or "#ordinal" when imported by ordinal.
   name : String
-} derive(Debug)
+ } derive(Debug, Show)
 
 /// An exported symbol.
 pub(all) struct Export {
   name : String
   ordinal : Int
   rva : Int64
-} derive(Debug)
+ } derive(Debug, Show)

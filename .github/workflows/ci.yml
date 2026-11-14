@@ -59,6 +59,8 @@ jobs:
         run: |
           moon build --target native --release cmd/main
           python3 -I test/analysis_crosscheck.py
+      - name: DWARF cross-check (objdump)
+        run: python3 -I test/dwarf_crosscheck.py
       - name: Web playground e2e
         run: |
           moon build --target wasm --release src/web

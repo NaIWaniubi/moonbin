@@ -5,6 +5,7 @@ import {
   "NaIWaniubi/moonbin/src/macho",
   "NaIWaniubi/moonbin/src/disasm",
   "NaIWaniubi/moonbin/src/analysis",
+  "NaIWaniubi/moonbin/src/dwarf",
   "NaIWaniubi/moonbin/src/format",
   "NaIWaniubi/moonbin/src/inspect",
   "moonbitlang/x/fs",

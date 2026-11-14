@@ -1,0 +1,31 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "NaIWaniubi/moonbin/src/dwarf"
+
+import {
+  "NaIWaniubi/moonbin/src/core",
+  "moonbitlang/core/debug",
+}
+
+// Values
+pub fn decode_funcs(Bytes, Array[@core.Region]) -> Result[Array[FuncEntry], @core.ParseError]
+
+pub fn decode_lines(Bytes, Array[@core.Region]) -> Result[Array[LineEntry], @core.ParseError]
+
+// Errors
+
+// Types and methods
+pub(all) struct FuncEntry {
+  name : String
+  low : Int64
+  high : Int64
+} derive(@debug.Debug)
+
+pub(all) struct LineEntry {
+  addr : Int64
+  file : String
+  line : Int32
+} derive(@debug.Debug)
+
+// Type aliases
+
+// Traits

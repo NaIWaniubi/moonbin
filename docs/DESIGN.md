@@ -107,3 +107,19 @@ Every "no" above corresponds to a concrete `Err`/`.byte` branch in the code.
 - **RE workbench** (`web/`): the wasm playground now renders a hex view, per-section
   entropy bars, and a client-side basic-block CFG alongside the tables, turning the
   demo into a small in-browser reverse-engineering workbench.
+
+## 8. v0.4: DWARF source mapping
+
+- `src/dwarf` decodes `.debug_line` (v4 & v5) into (addr, file, line) rows and
+  `.debug_info`/`.debug_abbrev` subprograms into (name, low, high). v5 dir/file
+  tables are read by form (string / line_strp / strp / udata / data1 / data16 /
+  sec_offset / exprloc / implicit_const), unknown forms skipped by size.
+- Raw PE/ELF section bytes are alignment-padded with zeros after the last unit;
+  the unit loop stops at `unit_length == 0` and refuses a unit that runs past the
+  section, so padding is never misparsed as a unit.
+- Verified against the authoritative oracle, not just crafted fixtures: on a real
+  gcc `-g` binary (both `-gdwarf-4` and default v5) the line rows equal
+  `objdump --dwarf=decodedline` and the subprogram set is {add, main} with sane
+  ranges (`test/dwarf_crosscheck.py`). A few of the original hand-crafted v5
+  fixtures used non-standard form encodings and were replaced by this real-data
+  cross-check.

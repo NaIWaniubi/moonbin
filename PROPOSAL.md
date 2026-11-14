@@ -25,7 +25,7 @@ moonbin — 纯 MoonBit 的二进制格式解析与 x86-64 反汇编库
 
 ## 5 拟实现的核心功能
 
-已完成：PE32/PE32+（DOS→NT→COFF→可选头→节表→导入/导出/符号，RVA→文件偏移，重定位/延迟导入/TLS/资源 best-effort）；ELF32/64 双端序（头、段、节、symtab/dynsym、dynamic、rela 导入归属）；Mach-O 32/64 双端序（段/节、symtab、dylib、入口）；x86-64 整数+SSE+x87+VEX/AVX 子集（前缀/REX/ModR/M/SIB/disp/imm，长度精确）；strings/熵分析；基本块 CFG + 直接调用图；格式自动识别；CLI 十个子命令 + `--json`；浏览器 wasm RE 工作台（hex/CFG/熵条）；174 个单元测试 + 1424 次变异 fuzz 无 panic；五份参考工具交叉核对（objdump 结构+调用图、readelf、lief、capstone）；native 与 wasm 双构建；`--deny-warn` 零告警。
+已完成：PE32/PE32+（DOS→NT→COFF→可选头→节表→导入/导出/符号，RVA→文件偏移，重定位/延迟导入/TLS/资源 best-effort）；ELF32/64 双端序（头、段、节、symtab/dynsym、dynamic、rela 导入归属）；Mach-O 32/64 双端序（段/节、symtab、dylib、入口）；x86-64 整数+SSE+x87+VEX/AVX 子集（前缀/REX/ModR/M/SIB/disp/imm，长度精确）；strings/熵分析；基本块 CFG + 直接调用图；DWARF v4/v5 源码行映射 + 子程序范围；格式自动识别；CLI 十一个子命令 + `--json`；浏览器 wasm RE 工作台（hex/CFG/熵条）；181 个单元测试 + 1424 次变异 fuzz 无 panic；六份参考工具交叉核对（objdump 结构+调用图+DWARF、readelf、lief、capstone）；native 与 wasm 双构建；`--deny-warn` 零告警。
 
 ## 6 原创性
 
