@@ -13,7 +13,7 @@ import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 BIN = os.path.join(ROOT, "_build", "native", "release", "build", "cmd", "main", "main.exe")
-SAMPLE = os.path.join(ROOT, "examples", "notepad.exe")
+SAMPLE = os.path.join(ROOT, "examples", "dbg.exe")
 
 
 def cli_edges():
