@@ -176,6 +176,28 @@ fn disasm_json(data : Bytes, regions : Array[@core.Region], machine_ok : Bool) -
   }
 }
 
+fn dwarf_json(data : Bytes, regions : Array[@core.Region]) -> String {
+  let ls : Array[String] = []
+  match @dwarf.decode_lines(data, regions) {
+    Ok(rows) => {
+      for r in rows {
+        ls.push("{\"addr\":\"\{hex(r.addr)}\",\"file\":\"\{jesc(r.file)}\",\"line\":\{r.line}}")
+      }
+    }
+    Err(_) => ()
+  }
+  let fs : Array[String] = []
+  match @dwarf.decode_funcs(data, regions) {
+    Ok(rows) => {
+      for f in rows {
+        fs.push("{\"name\":\"\{jesc(f.name)}\",\"low\":\"\{hex(f.low)}\",\"high\":\"\{hex(f.high)}\"}")
+      }
+    }
+    Err(_) => ()
+  }
+  "{\"lines\":[" + ls.join(",") + "],\"funcs\":[" + fs.join(",") + "]}"
+}
+
 fn pe_report(p : @pe.Pe, data : Bytes) -> String {
   let machine_ok = p.machine == 0x8664 || p.machine == 0x14C
   "{\"ok\":true,\"format\":\"PE\",\"machine\":\{p.machine},\"is64\":\{p.is64},\"entry\":\"\{hex(p.entry)}\",\"base\":\"\{hex(p.image_base)}\"," +
@@ -185,7 +207,7 @@ fn pe_report(p : @pe.Pe, data : Bytes) -> String {
   ",\"symbols\":" + symbols_json(p.symbols) +
   ",\"disasm\":" + disasm_json(data, p.sections, machine_ok) +
   ",\"section_entropy\":" + section_entropy_json(data, p.sections) +
-  "," + raw_part(data) + "}"
+  ",\"dwarf\":" + dwarf_json(data, p.sections) + "," + raw_part(data) + "}"
 }
 
 fn elf_report(e : @elf.Elf, data : Bytes) -> String {
@@ -202,7 +224,7 @@ fn elf_report(e : @elf.Elf, data : Bytes) -> String {
   ",\"symbols\":" + symbols_json(e.symbols) +
   ",\"disasm\":" + disasm_json(data, e.sections, machine_ok) +
   ",\"section_entropy\":" + section_entropy_json(data, e.sections) +
-  "," + raw_part(data) + "}"
+  ",\"dwarf\":" + dwarf_json(data, e.sections) + "," + raw_part(data) + "}"
 }
 
 fn macho_report(m : @macho.MachO, data : Bytes) -> String {
@@ -214,11 +236,11 @@ fn macho_report(m : @macho.MachO, data : Bytes) -> String {
   ",\"symbols\":" + symbols_json(m.symbols) +
   ",\"disasm\":" + disasm_json(data, m.sections, machine_ok) +
   ",\"section_entropy\":" + section_entropy_json(data, m.sections) +
-  "," + raw_part(data) + "}"
+  ",\"dwarf\":" + dwarf_json(data, m.sections) + "," + raw_part(data) + "}"
 }
 
 fn refused(format : String, msg : String, data : Bytes) -> String {
-  "{\"ok\":false,\"format\":\"\{format}\",\"error\":\"\{jesc(msg)}\",\"sections\":[],\"imports\":[],\"exports\":[],\"symbols\":[],\"disasm\":{\"insns\":[],\"note\":\"\"},\"section_entropy\":[]," +
+  "{\"ok\":false,\"format\":\"\{format}\",\"error\":\"\{jesc(msg)}\",\"sections\":[],\"imports\":[],\"exports\":[],\"symbols\":[],\"disasm\":{\"insns\":[],\"note\":\"\"},\"section_entropy\":[],\"dwarf\":{\"lines\":[],\"funcs\":[]}," +
   raw_part(data) + "}"
 }
 

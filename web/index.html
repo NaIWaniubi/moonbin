@@ -57,6 +57,7 @@
   <textarea id="hex" spellcheck="false" placeholder="...or paste hex bytes here: 4d 5a 90 00  (0x prefixes, commas and whitespace are accepted)"></textarea>
   <div class="controls">
     <button id="analyze">Analyze</button>
+    <span id="perf" class="badge"></span>
   </div>
   <div id="status">loading wasm...</div>
   <div id="out"></div>
@@ -375,8 +376,10 @@ if (typeof document !== 'undefined') {
       const right = el('div');
       if (d.insns.length > 0) {
         right.appendChild(el('h2', null, 'Disassembly (.text, first ' + d.insns.length + ')'));
-        const rows = d.insns.map((i) => [i.addr, i.bytes, i.mnemonic, i.op_str]);
-        right.appendChild(makeTable(['addr', 'bytes', 'mnemonic', 'operands'], rows));
+        const src = {};
+        if (r.dwarf && r.dwarf.lines) r.dwarf.lines.forEach((l) => { src[l.addr] = l.file + ':' + l.line; });
+        const rows = d.insns.map((i) => [i.addr, i.bytes, i.mnemonic, i.op_str, src[i.addr] || '']);
+        right.appendChild(makeTable(['addr', 'bytes', 'mnemonic', 'operands', 'source'], rows));
       } else {
         right.appendChild(el('h2', null, 'Disassembly'));
         right.appendChild(el('div', 'note', d.note || 'no instructions decoded'));
@@ -387,6 +390,10 @@ if (typeof document !== 'undefined') {
       outEl.appendChild(s);
       const cfg = cfgSVG(d.insns);
       if (cfg) addSection('Control-flow graph (decoded window)', cfg);
+      if (r.dwarf && r.dwarf.funcs && r.dwarf.funcs.length > 0) {
+        const rows = r.dwarf.funcs.map((f) => [f.name, f.low, f.high]);
+        addSection('Source functions (DWARF)', makeTable(['name', 'low', 'high'], rows));
+      }
     }
     if (r.strings.length > 0) {
       const rows = r.strings.map((s) => [s.offset, s.text]);
@@ -410,6 +417,8 @@ if (typeof document !== 'undefined') {
       const report = JSON.parse(res.stdout);
       renderReport(report);
       const ms = (performance.now() - t0).toFixed(1);
+      const mbs = ms > 0 ? (bytes.length / 1048576 / (ms / 1000)).toFixed(1) : '—';
+      $('perf').textContent = ms + ' ms · ' + mbs + ' MB/s · pure wasm, in-browser';
       setStatus(label + ': ' + bytes.length + ' bytes analyzed in ' + ms + ' ms' +
         (report.ok ? '' : ' (container refused; raw analysis still shown)'));
     } catch (e) {

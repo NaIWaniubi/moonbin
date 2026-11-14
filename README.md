@@ -11,6 +11,10 @@ entropy bars).
 Mature analogs in other ecosystems: `goblin` / `LIEF` / `pefile` (format parsing),
 `capstone` / `iced-x86` (disassembly). MoonBit had no equivalent; moonbin fills that gap.
 
+**See it:** [DEMO.md](DEMO.md) (3-minute walkthrough) · [BENCHMARKS.md](BENCHMARKS.md)
+(native ≈ objdump, ~1.3× capstone, and the same code in-browser). The web workbench
+shows a live `ms · MB/s` badge, a source-line gutter (DWARF), hex, CFG and entropy bars.
+
 ```
 $ moonbin info notepad.exe
 format   PE

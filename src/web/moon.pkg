@@ -8,6 +8,7 @@ import {
   "NaIWaniubi/moonbin/src/disasm",
   "NaIWaniubi/moonbin/src/format",
   "NaIWaniubi/moonbin/src/inspect",
+  "NaIWaniubi/moonbin/src/dwarf",
   "moonbitlang/x/fs",
   "moonbitlang/core/env",
 }
